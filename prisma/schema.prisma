@@ -1,0 +1,118 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  password      String
+  name          String
+  role          Role           @default(CLIENT)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  bookings      Booking[]      @relation("ClientBookings")
+  notifications Notification[]
+  products      Product[]      @relation("SellerProducts")
+  vendor        Vendor?
+}
+
+model Vendor {
+  id                String          @id @default(uuid())
+  userId            String          @unique
+  name              String
+  category          String
+  rating            Float           @default(5.0)
+  location          String
+  image             String
+  acceptingBookings Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  bookings          Booking[]       @relation("VendorBookings")
+  inventory         InventoryItem[]
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reels             VibeReel[]
+}
+
+model InventoryItem {
+  id         String   @id @default(uuid())
+  vendorId   String
+  name       String
+  units      Int      @default(1)
+  hourlyRate Int
+  dailyRate  Int
+  image      String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  vendor     Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+}
+
+model Product {
+  id        String   @id @default(uuid())
+  sellerId  String
+  name      String
+  price     Int
+  condition String
+  location  String
+  image     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  seller    User     @relation("SellerProducts", fields: [sellerId], references: [id], onDelete: Cascade)
+}
+
+model Booking {
+  id         String        @id @default(uuid())
+  clientId   String
+  vendorId   String
+  eventName  String
+  clientName String
+  date       String
+  time       String
+  location   String
+  status     BookingStatus @default(PENDING)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  client     User          @relation("ClientBookings", fields: [clientId], references: [id], onDelete: Cascade)
+  vendor     Vendor        @relation("VendorBookings", fields: [vendorId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  time      String
+  type      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VibeReel {
+  id        String   @id @default(uuid())
+  vendorId  String
+  title     String
+  thumbnail String
+  views     String   @default("0")
+  duration  String   @default("0:15")
+  createdAt DateTime @default(now())
+  vendor    Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+}
+
+enum Role {
+  CLIENT
+  VENDOR
+  ADMIN
+}
+
+enum BookingStatus {
+  PENDING
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  DECLINED
+}

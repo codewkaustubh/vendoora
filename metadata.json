@@ -1,0 +1,6 @@
+{
+  "name": "Vendoora",
+  "description": "Premium event marketplace and pre-owned equipment directory for Indian celebrations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
