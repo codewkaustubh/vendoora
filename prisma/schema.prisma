@@ -28,6 +28,8 @@ model User {
   bookings        Booking[]        @relation("ClientBookings")
   notifications   Notification[]
   products        Product[]        @relation("SellerProducts")
+  reviews         Review[]
+  wishlists       Wishlist[]
 
   @@index([email])
   @@index([role])
@@ -73,6 +75,7 @@ model Vendor {
   inventory           InventoryItem[]
   services            Service[]
   reels               VibeReel[]
+  reviews             Review[]
 
   @@index([city])
   @@index([state])
@@ -123,6 +126,9 @@ model Service {
   vendor            Vendor      @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   category          Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
+  bookings          Booking[]
+  wishlists         Wishlist[]
+
   @@index([vendorId])
   @@index([categoryId])
   @@index([startingPrice])
@@ -170,19 +176,45 @@ model Product {
 }
 
 model Booking {
-  id         String        @id @default(uuid())
-  clientId   String
-  vendorId   String
-  eventName  String
-  clientName String
-  date       String
-  time       String
-  location   String
-  status     BookingStatus @default(PENDING)
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
-  client     User          @relation("ClientBookings", fields: [clientId], references: [id], onDelete: Cascade)
-  vendor     Vendor        @relation("VendorBookings", fields: [vendorId], references: [id], onDelete: Cascade)
+  id                 String          @id @default(uuid())
+
+  clientId           String
+  vendorId           String
+  serviceId          String?
+
+  eventName          String
+  eventDate          DateTime
+
+  startTime          String
+  endTime            String?
+
+  guestCount         Int?
+
+  venue              String
+
+  specialRequest     String?
+
+  totalPrice         Float
+
+  paymentStatus      PaymentStatus   @default(PENDING)
+
+  status             BookingStatus   @default(PENDING)
+
+  otp                String?
+
+  cancellationReason String?
+
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  client             User            @relation("ClientBookings", fields: [clientId], references: [id], onDelete: Cascade)
+  vendor             Vendor          @relation("VendorBookings", fields: [vendorId], references: [id], onDelete: Cascade)
+  service            Service?        @relation(fields: [serviceId], references: [id])
+
+  @@index([clientId])
+  @@index([vendorId])
+  @@index([serviceId])
+  @@index([status])
 }
 
 model Notification {
@@ -206,6 +238,39 @@ model VibeReel {
   duration  String   @default("0:15")
   createdAt DateTime @default(now())
   vendor    Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+}
+
+model Review {
+  id          String    @id @default(uuid())
+
+  userId      String
+  vendorId    String
+
+  rating      Int
+
+  comment     String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vendor      Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+}
+
+model Wishlist {
+  id         String   @id @default(uuid())
+
+  userId     String
+  serviceId  String
+
+  createdAt  DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, serviceId])
 }
 
 enum Role {
@@ -233,4 +298,11 @@ enum ProductCondition {
   EXCELLENT
   GOOD
   FAIR
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
 }
