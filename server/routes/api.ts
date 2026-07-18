@@ -6,6 +6,7 @@ import * as bookings from '../controllers/bookings';
 import * as marketplace from '../controllers/marketplace';
 import * as notifications from '../controllers/notifications';
 import * as reels from '../controllers/reels';
+import * as services from '../controllers/services';
 import { authenticateJWT, requireRole } from '../middlewares/auth';
 
 const router = Router();
@@ -30,6 +31,11 @@ router.post('/bookings', authenticateJWT, bookings.create);
 router.get('/bookings/vendor', authenticateJWT, requireRole(['VENDOR']), bookings.getVendorBookings);
 router.get('/bookings/client', authenticateJWT, requireRole(['CLIENT', 'ADMIN']), bookings.getClientBookings);
 router.put('/bookings/:id/status', authenticateJWT, requireRole(['VENDOR']), bookings.updateStatus);
+
+// --- SERVICE DISCOVERY ---
+router.post('/services', authenticateJWT, requireRole(['VENDOR']), services.create);
+router.get('/services', services.getAll);
+router.get('/services/:id', services.getById);
 
 // --- USED GEAR SECONDARY MARKETPLACE ---
 router.post('/marketplace/products', authenticateJWT, marketplace.listProduct);

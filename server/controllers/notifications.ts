@@ -32,7 +32,7 @@ export async function markRead(req: any, res: Response) {
 
     const updated = await prisma.notification.update({
       where: { id },
-      data: { read: true },
+      data: { read: true, readAt: new Date() },
     });
 
     return res.status(200).json({
@@ -48,7 +48,7 @@ export async function markAllRead(req: any, res: Response) {
   try {
     await prisma.notification.updateMany({
       where: { userId: req.user.id, read: false },
-      data: { read: true },
+      data: { read: true, readAt: new Date() },
     });
 
     return res.status(200).json({ message: 'All notifications marked as read' });

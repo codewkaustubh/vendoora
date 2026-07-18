@@ -3,7 +3,7 @@ import { prisma } from '../config/db';
 
 export async function listProduct(req: any, res: Response) {
   try {
-    const { name, price, condition, location, image } = req.body;
+    const { name, description, price, aiSuggestedPrice, condition, location, image, available } = req.body;
 
     if (!name || price === undefined || !condition || !location) {
       return res.status(400).json({ error: 'Missing name, price, condition, or location' });
@@ -13,10 +13,13 @@ export async function listProduct(req: any, res: Response) {
       data: {
         sellerId: req.user.id,
         name,
-        price: parseInt(price),
+        description: description ?? null,
+        price: parseFloat(price),
+        aiSuggestedPrice: aiSuggestedPrice !== undefined ? parseFloat(aiSuggestedPrice) : null,
         condition,
         location,
         image: image || 'https://images.unsplash.com/photo-1545454675-3531b543be5d?auto=format&fit=crop&q=80&w=800',
+        available: available !== undefined ? Boolean(available) : true,
       },
     });
 

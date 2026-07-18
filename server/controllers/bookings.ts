@@ -3,10 +3,28 @@ import { prisma } from '../config/db';
 
 export async function create(req: any, res: Response) {
   try {
-    const { vendorId, eventName, date, time, location } = req.body;
+    const {
+      vendorId,
+      eventName,
+      date,
+      time,
+      location,
+      eventDate,
+      startTime,
+      endTime,
+      venue,
+      guestCount,
+      totalPrice,
+      bookingOtp,
+      otpVerified,
+    } = req.body;
 
-    if (!vendorId || !eventName || !date || !time || !location) {
-      return res.status(400).json({ error: 'Missing vendorId, eventName, date, time, or location' });
+    const bookingDate = eventDate ?? date;
+    const bookingStartTime = startTime ?? time;
+    const bookingVenue = venue ?? location;
+
+    if (!vendorId || !eventName || !bookingDate || !bookingStartTime || !bookingVenue) {
+      return res.status(400).json({ error: 'Missing vendorId, eventName, date, time, or venue' });
     }
 
     const vendor = await prisma.vendor.findUnique({
@@ -23,10 +41,14 @@ export async function create(req: any, res: Response) {
         clientId: req.user.id,
         vendorId,
         eventName,
-        clientName: req.user.name || 'Anonymous Client',
-        date,
-        time,
-        location,
+        eventDate: new Date(bookingDate),
+        startTime: String(bookingStartTime),
+        endTime: endTime ? String(endTime) : undefined,
+        venue: String(bookingVenue),
+        guestCount: guestCount !== undefined ? Number(guestCount) : undefined,
+        totalPrice: Number(totalPrice ?? 0),
+        bookingOtp: bookingOtp ? String(bookingOtp) : undefined,
+        otpVerified: otpVerified === true,
         status: 'PENDING',
       },
     });
@@ -79,7 +101,7 @@ export async function getClientBookings(req: any, res: Response) {
       where: { clientId: req.user.id },
       include: {
         vendor: {
-          select: { name: true, category: true, image: true },
+          select: { businessName: true, ownerName: true, category: true, logo: true, coverImage: true },
         },
       },
       orderBy: { createdAt: 'desc' },

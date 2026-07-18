@@ -22,8 +22,8 @@ export async function add(req: any, res: Response) {
         vendorId: vendor.id,
         name,
         units: units !== undefined ? parseInt(units) : 1,
-        hourlyRate: parseInt(hourlyRate),
-        dailyRate: parseInt(dailyRate),
+        hourlyRate: parseFloat(hourlyRate),
+        dailyRate: parseFloat(dailyRate),
         image: image || 'https://images.unsplash.com/photo-1540518614846-7eded433c457?auto=format&fit=crop&q=80&w=400',
       },
     });
@@ -61,8 +61,8 @@ export async function updateRates(req: any, res: Response) {
     const updated = await prisma.inventoryItem.update({
       where: { id },
       data: {
-        hourlyRate: hourlyRate !== undefined ? parseInt(hourlyRate) : item.hourlyRate,
-        dailyRate: dailyRate !== undefined ? parseInt(dailyRate) : item.dailyRate,
+        hourlyRate: hourlyRate !== undefined ? parseFloat(hourlyRate) : item.hourlyRate,
+        dailyRate: dailyRate !== undefined ? parseFloat(dailyRate) : item.dailyRate,
       },
     });
 

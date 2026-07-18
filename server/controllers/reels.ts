@@ -22,7 +22,7 @@ export async function add(req: any, res: Response) {
         vendorId: vendor.id,
         title,
         thumbnail: thumbnail || 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=500',
-        views: '0',
+        views: 0,
         duration: duration || '0:15',
       },
     });
@@ -42,7 +42,7 @@ export async function getAll(req: Request, res: Response) {
       orderBy: { createdAt: 'desc' },
       include: {
         vendor: {
-          select: { name: true, category: true },
+          select: { businessName: true, ownerName: true, category: true, logo: true },
         },
       },
     });

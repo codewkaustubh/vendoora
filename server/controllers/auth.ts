@@ -35,10 +35,15 @@ export async function register(req: Request, res: Response) {
       await prisma.vendor.create({
         data: {
           userId: user.id,
-          name: `${user.name} Services`,
+          businessName: `${user.name} Services`,
+          ownerName: user.name,
           category: 'Tent & Decorators',
-          location: 'Mumbai, MH',
-          image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=500',
+          city: 'Mumbai',
+          state: 'MH',
+          logo: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=500',
+          coverImage: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=500',
+          verificationStatus: 'PENDING',
+          acceptingBookings: true,
         },
       });
     }

@@ -8,74 +8,75 @@ datasource db {
 }
 
 model User {
-  id              String           @id @default(uuid())
-  name            String
-  email           String           @unique
-  phone           String?          @unique
-  password        String?
-  googleId        String?          @unique
-  profileImage    String?
-  city            String?
-  state           String?
-  role            Role             @default(CLIENT)
-  isVerified      Boolean          @default(false)
+  id           String  @id @default(uuid())
+  name         String
+  email        String  @unique
+  phone        String? @unique
+  password     String?
+  googleId     String? @unique
+  profileImage String?
+  city         String?
+  state        String?
+  role         Role    @default(CLIENT)
+  isVerified   Boolean @default(false)
 
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  vendor          Vendor?
+  vendor Vendor?
 
-  bookings        Booking[]        @relation("ClientBookings")
-  notifications   Notification[]
-  products        Product[]        @relation("SellerProducts")
-  reviews         Review[]
-  wishlists       Wishlist[]
+  bookings      Booking[]      @relation("ClientBookings")
+  notifications Notification[]
+  products      Product[]      @relation("SellerProducts")
+  reviews       Review[]
+  wishlists     Wishlist[]
+  refreshTokens RefreshToken[] @relation("UserRefreshTokens")
 
   @@index([email])
   @@index([role])
 }
 
 model Vendor {
-  id                  String            @id @default(uuid())
-  userId              String            @unique
+  id     String @id @default(uuid())
+  userId String @unique
 
   businessName        String
   businessDescription String?
 
-  ownerName           String
+  ownerName String
 
-  category            String
+  category String
 
-  phone               String?
-  email               String?
+  phone String?
+  email String?
 
-  gstNumber           String?
+  gstNumber String?
 
-  city                String
-  state               String
+  city  String
+  state String
 
-  address             String?
+  address String?
 
-  logo                String?
-  coverImage          String?
+  logo       String?
+  coverImage String?
 
-  rating              Float             @default(5.0)
-  totalReviews        Int               @default(0)
-  totalBookings       Int               @default(0)
+  rating        Float @default(5.0)
+  totalReviews  Int   @default(0)
+  totalBookings Int   @default(0)
 
-  verified            Boolean           @default(false)
-  acceptingBookings   Boolean           @default(true)
+  verificationStatus VerificationStatus @default(PENDING)
+  acceptingBookings  Boolean            @default(true)
 
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  bookings            Booking[]         @relation("VendorBookings")
-  inventory           InventoryItem[]
-  services            Service[]
-  reels               VibeReel[]
-  reviews             Review[]
+  bookings  Booking[]       @relation("VendorBookings")
+  inventory InventoryItem[]
+  services  Service[]
+  reels     VibeReel[]
+  reviews   Review[]
 
   @@index([city])
   @@index([state])
@@ -84,50 +85,50 @@ model Vendor {
 }
 
 model Category {
-  id          String    @id @default(uuid())
-  name        String    @unique
-  slug        String    @unique
+  id          String  @id @default(uuid())
+  name        String  @unique
+  slug        String  @unique
   description String?
   icon        String?
   image       String?
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  services    Service[]
+  services Service[]
 
   @@index([name])
 }
 
 model Service {
-  id                String      @id @default(uuid())
+  id String @id @default(uuid())
 
-  vendorId          String
-  categoryId        String
+  vendorId   String
+  categoryId String
 
-  title             String
-  description       String?
+  title       String
+  description String?
 
-  startingPrice     Float
+  startingPrice Float
 
-  priceType         PriceType   @default(FIXED)
+  priceType PriceType @default(FIXED)
 
-  duration          String?
+  duration String?
 
-  location          String?
+  location String?
 
-  coverImage        String?
+  coverImage String?
 
-  isAvailable       Boolean     @default(true)
+  isAvailable Boolean @default(true)
 
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  vendor            Vendor      @relation(fields: [vendorId], references: [id], onDelete: Cascade)
-  category          Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  vendor   Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
-  bookings          Booking[]
-  wishlists         Wishlist[]
+  bookings  Booking[]
+  wishlists Wishlist[]
 
   @@index([vendorId])
   @@index([categoryId])
@@ -139,8 +140,8 @@ model InventoryItem {
   vendorId   String
   name       String
   units      Int      @default(1)
-  hourlyRate Int
-  dailyRate  Int
+  hourlyRate Float
+  dailyRate  Float
   image      String
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -148,68 +149,69 @@ model InventoryItem {
 }
 
 model Product {
-  id                String             @id @default(uuid())
+  id String @id @default(uuid())
 
-  sellerId          String
+  sellerId String
 
-  name              String
-  description       String?
+  name        String
+  description String?
 
-  price             Float
+  price Float
 
-  aiSuggestedPrice  Float?
+  aiSuggestedPrice Float?
 
-  condition         ProductCondition
+  condition ProductCondition
 
-  location          String
+  location String
 
-  image             String?
+  image String?
 
-  available         Boolean            @default(true)
+  available Boolean @default(true)
 
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  seller            User               @relation("SellerProducts", fields: [sellerId], references: [id], onDelete: Cascade)
+  seller User @relation("SellerProducts", fields: [sellerId], references: [id], onDelete: Cascade)
 
   @@index([sellerId])
 }
 
 model Booking {
-  id                 String          @id @default(uuid())
+  id String @id @default(uuid())
 
-  clientId           String
-  vendorId           String
-  serviceId          String?
+  clientId  String
+  vendorId  String
+  serviceId String?
 
-  eventName          String
-  eventDate          DateTime
+  eventName String
+  eventDate DateTime
 
-  startTime          String
-  endTime            String?
+  startTime String
+  endTime   String?
 
-  guestCount         Int?
+  guestCount Int?
 
-  venue              String
+  venue String
 
-  specialRequest     String?
+  specialRequest String?
 
-  totalPrice         Float
+  totalPrice Float
 
-  paymentStatus      PaymentStatus   @default(PENDING)
+  paymentStatus PaymentStatus @default(PENDING)
 
-  status             BookingStatus   @default(PENDING)
+  status BookingStatus @default(PENDING)
 
-  otp                String?
+  bookingOtp  String?
+  otpVerified Boolean @default(false)
 
   cancellationReason String?
 
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  client             User            @relation("ClientBookings", fields: [clientId], references: [id], onDelete: Cascade)
-  vendor             Vendor          @relation("VendorBookings", fields: [vendorId], references: [id], onDelete: Cascade)
-  service            Service?        @relation(fields: [serviceId], references: [id])
+  client  User     @relation("ClientBookings", fields: [clientId], references: [id], onDelete: Cascade)
+  vendor  Vendor   @relation("VendorBookings", fields: [vendorId], references: [id], onDelete: Cascade)
+  service Service? @relation(fields: [serviceId], references: [id])
 
   @@index([clientId])
   @@index([vendorId])
@@ -218,15 +220,16 @@ model Booking {
 }
 
 model Notification {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
   title     String
   message   String
-  time      String
+  time      String?
+  readAt    DateTime?
   type      String
-  read      Boolean  @default(false)
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  read      Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model VibeReel {
@@ -234,41 +237,41 @@ model VibeReel {
   vendorId  String
   title     String
   thumbnail String
-  views     String   @default("0")
+  views     Int      @default(0)
   duration  String   @default("0:15")
   createdAt DateTime @default(now())
   vendor    Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
 }
 
 model Review {
-  id          String    @id @default(uuid())
+  id String @id @default(uuid())
 
-  userId      String
-  vendorId    String
+  userId   String
+  vendorId String
 
-  rating      Int
+  rating Int
 
-  comment     String?
+  comment String?
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  vendor      Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
 
   @@index([vendorId])
 }
 
 model Wishlist {
-  id         String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  userId     String
-  serviceId  String
+  userId    String
+  serviceId String
 
-  createdAt  DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
   @@unique([userId, serviceId])
 }
@@ -305,4 +308,33 @@ enum PaymentStatus {
   PAID
   FAILED
   REFUNDED
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+model RefreshToken {
+  id         String  @id @default(uuid())
+  token      String  @unique
+  userId     String
+  deviceId   String? // Identifies a specific device/browser session
+  deviceName String? // Human-readable device description (e.g. "Chrome on Windows")
+  ipAddress  String? // Client IP address for logging and security audits
+  userAgent  String? // Full browser user agent string
+
+  // Refresh Token Rotation (RTR) Support
+  isRevoked  Boolean @default(false)
+  replacedBy String? // Token that succeeded/replaced this token
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation("UserRefreshTokens", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
 }
