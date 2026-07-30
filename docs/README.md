@@ -12,7 +12,7 @@ VENDOORA is a premium marketplace for event vendors and customers. It is designe
 - Backend: Node.js, Express
 - Database: PostgreSQL, Prisma
 - Authentication: JWT-based auth flow with placeholder/early-stage integration points
-- Storage/AI: Cloudinary and Gemini-style AI hooks are referenced in environment examples but are not yet fully wired as core product flows
+- Storage/AI: Cloudinary and AI hooks are referenced in environment examples but are not yet fully wired as core product flows
 
 ## Project Structure
 
@@ -48,7 +48,6 @@ The app runs locally through a Vite-powered frontend and an Express server entry
 
 The current example file lists the following variables:
 
-- GEMINI_API_KEY: placeholder for AI capabilities
 - APP_URL: app base URL
 - DATABASE_URL: PostgreSQL connection string
 - JWT_SECRET: JWT signing secret

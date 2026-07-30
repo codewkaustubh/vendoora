@@ -1,20 +1,73 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# VENDOORA
 
-# Run and deploy your AI Studio app
+An AI-powered Event Vendor Marketplace built to connect customers with trusted event service providers through a modern and intelligent platform.
 
-This contains everything you need to run your app locally.
+## Features
 
-View your app in AI Studio: https://ai.studio/apps/20e794c1-2de2-4721-a5bf-a6fd38ef2028
+- Vendor Marketplace
+- Event Booking System
+- Vendor Dashboard
+- Customer Dashboard
+- Inventory Management
+- Marketplace for Pre-owned Event Equipment
+- Vibe Reels
+- Notifications
+- Authentication & Authorization
+- AI-powered Recommendations
 
-## Run Locally
+## Tech Stack
 
-**Prerequisites:**  Node.js
+### Frontend
+- React
+- TypeScript
+- Vite
+- Tailwind CSS
 
+### Backend
+- Node.js
+- Express.js
+- Prisma ORM
+- PostgreSQL
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Installation
+
+Clone the repository
+
+```bash
+git clone https://github.com/codewkaustubh/vendoora.git
+```
+
+Install dependencies
+
+```bash
+npm install
+```
+
+Configure your environment variables
+
+```env
+DATABASE_URL=your_database_url
+JWT_SECRET=your_secret
+```
+
+Run the development server
+
+```bash
+npm run dev
+```
+
+Build the project
+
+```bash
+npm run build
+```
+
+## Project Status
+
+Current Progress: Phase 8 Completed
+
+Next Milestone: Phase 9 – AI Features, Performance Optimization & Production Deployment
+
+## Author
+
+Kaustubh
