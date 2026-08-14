@@ -31,6 +31,7 @@ import {
 import HeaderBar from '../components/layout/HeaderBar';
 import VibeReelsTray from '../components/vendoora/VibeReelsTray';
 import MarketplaceSection from '../components/marketplace/MarketplaceSection';
+import MarketplaceDiscovery from '../components/marketplace/MarketplaceDiscovery';
 import WhatsAppChatFab from '../components/layout/WhatsAppChatFab';
 import BudgetCalculatorModal from '../components/budget/BudgetCalculatorModal';
 import VendorTermsModal from '../components/vendor/VendorTermsModal';
@@ -376,6 +377,13 @@ export default function VendooraLandingPage({
         {/* 6. Secondary Market (Strict order item 6) */}
         <section id="marketplace-section-root" className="w-full py-4">
           <MarketplaceSection id="landing-equipment-marketplace" products={products} />
+        </section>
+
+        {/* 6.5. Marketplace Discovery with Filters (Strict order item 6.5) */}
+        <section id="marketplace-discovery-root" className="w-full bg-gradient-to-b from-zinc-900 to-zinc-800 py-12">
+          <div className="w-full max-w-7xl mx-auto px-4 md:px-6">
+            <MarketplaceDiscovery />
+          </div>
         </section>
 
         {/* 7. Featured Vendors (Strict order item 7) */}

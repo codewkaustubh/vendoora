@@ -8,6 +8,7 @@ import * as notifications from '../controllers/notifications';
 import * as reels from '../controllers/reels';
 import * as services from '../controllers/services';
 import * as media from '../controllers/media';
+import * as discovery from '../controllers/discovery';
 import { authenticateJWT, requireRole } from '../middlewares/auth';
 import { upload } from '../config/cloudinary';
 
@@ -55,5 +56,8 @@ router.put('/notifications/read-all', authenticateJWT, notifications.markAllRead
 router.post('/reels', authenticateJWT, requireRole(['VENDOR']), reels.add);
 router.get('/reels', reels.getAll);
 router.delete('/reels/:id', authenticateJWT, requireRole(['VENDOR']), reels.remove);
+
+// --- DISCOVERY & SEARCH ---
+router.get('/search', discovery.searchDiscovery);
 
 export default router;

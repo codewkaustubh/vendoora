@@ -90,8 +90,78 @@ export async function create(req: any, res: Response) {
 
 export async function getAll(req: Request, res: Response) {
   try {
+    const { search, category, location, city, minPrice, maxPrice, isAvailable, sortBy, page = '1', limit = '20' } = req.query;
+
+    const whereClause: any = { isAvailable: isAvailable !== 'false' };
+    const pageNum = Math.max(1, parseInt(String(page)) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(String(limit)) || 20));
+    const skip = (pageNum - 1) * pageSize;
+
+    // Category filter
+    if (category) {
+      whereClause.category = {
+        is: {
+          name: {
+            contains: String(category),
+            mode: 'insensitive',
+          },
+        },
+      };
+    }
+
+    // Location filter
+    if (city || location) {
+      const locTerm = String(city || location);
+      whereClause.vendor = {
+        is: {
+          city: {
+            contains: locTerm,
+            mode: 'insensitive',
+          },
+        },
+      };
+    }
+
+    // Price range filter
+    const minPriceVal = minPrice ? parseFloat(String(minPrice)) : undefined;
+    const maxPriceVal = maxPrice ? parseFloat(String(maxPrice)) : undefined;
+    if (minPriceVal !== undefined || maxPriceVal !== undefined) {
+      whereClause.startingPrice = {};
+      if (minPriceVal !== undefined) whereClause.startingPrice.gte = minPriceVal;
+      if (maxPriceVal !== undefined) whereClause.startingPrice.lte = maxPriceVal;
+    }
+
+    // Text search
+    if (search) {
+      const searchTerm = String(search);
+      whereClause.OR = [
+        { title: { contains: searchTerm, mode: 'insensitive' } },
+        { description: { contains: searchTerm, mode: 'insensitive' } },
+      ];
+    }
+
+    // Sorting
+    const orderByClause: any = { createdAt: 'desc' };
+    switch (String(sortBy)) {
+      case 'price-asc':
+        Object.assign(orderByClause, { startingPrice: 'asc' });
+        break;
+      case 'price-desc':
+        Object.assign(orderByClause, { startingPrice: 'desc' });
+        break;
+      case 'newest':
+        Object.assign(orderByClause, { createdAt: 'desc' });
+        break;
+      case 'oldest':
+        Object.assign(orderByClause, { createdAt: 'asc' });
+        break;
+    }
+
+    const total = await prisma.service.count({ where: whereClause });
+
     const services = await prisma.service.findMany({
-      orderBy: { createdAt: 'desc' },
+      where: whereClause,
+      orderBy: orderByClause,
       include: {
         vendor: {
           select: {

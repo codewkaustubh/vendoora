@@ -34,16 +34,84 @@ export async function listProduct(req: any, res: Response) {
 
 export async function getAllProducts(req: Request, res: Response) {
   try {
+    const { search, condition, minPrice, maxPrice, location, sortBy, available = 'true', page = '1', limit = '20' } = req.query;
+
+    const whereClause: any = { available: available !== 'false' };
+    const pageNum = Math.max(1, parseInt(String(page)) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(String(limit)) || 20));
+    const skip = (pageNum - 1) * pageSize;
+
+    // Condition filter
+    if (condition) {
+      whereClause.condition = String(condition);
+    }
+
+    // Location filter
+    if (location) {
+      whereClause.location = {
+        contains: String(location),
+        mode: 'insensitive',
+      };
+    }
+
+    // Price range filter
+    const minPriceVal = minPrice ? parseFloat(String(minPrice)) : undefined;
+    const maxPriceVal = maxPrice ? parseFloat(String(maxPrice)) : undefined;
+    if (minPriceVal !== undefined || maxPriceVal !== undefined) {
+      whereClause.price = {};
+      if (minPriceVal !== undefined) whereClause.price.gte = minPriceVal;
+      if (maxPriceVal !== undefined) whereClause.price.lte = maxPriceVal;
+    }
+
+    // Text search
+    if (search) {
+      const searchTerm = String(search);
+      whereClause.OR = [
+        { name: { contains: searchTerm, mode: 'insensitive' } },
+        { description: { contains: searchTerm, mode: 'insensitive' } },
+      ];
+    }
+
+    // Sorting
+    const orderByClause: any = { createdAt: 'desc' };
+    switch (String(sortBy)) {
+      case 'price-asc':
+        Object.assign(orderByClause, { price: 'asc' });
+        break;
+      case 'price-desc':
+        Object.assign(orderByClause, { price: 'desc' });
+        break;
+      case 'newest':
+        Object.assign(orderByClause, { createdAt: 'desc' });
+        break;
+      case 'oldest':
+        Object.assign(orderByClause, { createdAt: 'asc' });
+        break;
+    }
+
+    const total = await prisma.product.count({ where: whereClause });
+
     const products = await prisma.product.findMany({
-      orderBy: { createdAt: 'desc' },
+      where: whereClause,
+      orderBy: orderByClause,
       include: {
         seller: {
-          select: { name: true, email: true },
+          select: { name: true, email: true, id: true },
         },
       },
+      skip,
+      take: pageSize,
     });
 
-    return res.status(200).json({ products });
+    return res.status(200).json({
+      products,
+      pagination: {
+        total,
+        page: pageNum,
+        limit: pageSize,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    });
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Server error fetching marketplace products' });
   }

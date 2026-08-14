@@ -3,10 +3,14 @@ import { prisma } from '../config/db';
 
 export async function getAll(req: Request, res: Response) {
   try {
-    const { category, search, location } = req.query;
+    const { category, search, location, city, state, minRating, sortBy, page = '1', limit = '20' } = req.query;
 
     const whereClause: any = {};
+    const pageNum = Math.max(1, parseInt(String(page)) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(String(limit)) || 20));
+    const skip = (pageNum - 1) * pageSize;
 
+    // Category filter
     if (category) {
       whereClause.category = {
         contains: String(category),
@@ -14,38 +18,91 @@ export async function getAll(req: Request, res: Response) {
       };
     }
 
-    const orConditions: any[] = [];
+    // Location filters (city/state)
+    if (city) {
+      whereClause.city = {
+        contains: String(city),
+        mode: 'insensitive',
+      };
+    }
+    if (state) {
+      whereClause.state = {
+        contains: String(state),
+        mode: 'insensitive',
+      };
+    }
 
+    // Rating filter
+    const minRatingVal = parseFloat(String(minRating || '0'));
+    if (minRatingVal > 0) {
+      whereClause.rating = {
+        gte: minRatingVal,
+      };
+    }
+
+    // Text search
+    const orConditions: any[] = [];
     if (search) {
       const searchTerm = String(search);
       orConditions.push(
         { businessName: { contains: searchTerm, mode: 'insensitive' } },
         { ownerName: { contains: searchTerm, mode: 'insensitive' } },
-        { category: { contains: searchTerm, mode: 'insensitive' } },
+        { businessDescription: { contains: searchTerm, mode: 'insensitive' } },
       );
     }
-
-    if (location) {
+    if (location && !city && !state) {
       const locationTerm = String(location);
       orConditions.push(
         { city: { contains: locationTerm, mode: 'insensitive' } },
         { state: { contains: locationTerm, mode: 'insensitive' } },
       );
     }
-
     if (orConditions.length > 0) {
       whereClause.OR = orConditions;
     }
+
+    // Sorting
+    const orderByClause: any = { rating: 'desc' };
+    switch (String(sortBy)) {
+      case 'rating':
+        Object.assign(orderByClause, { rating: 'desc' });
+        break;
+      case 'newest':
+        Object.assign(orderByClause, { createdAt: 'desc' });
+        break;
+      case 'oldest':
+        Object.assign(orderByClause, { createdAt: 'asc' });
+        break;
+      case 'reviews':
+        Object.assign(orderByClause, { totalReviews: 'desc' });
+        break;
+      case 'bookings':
+        Object.assign(orderByClause, { totalBookings: 'desc' });
+        break;
+    }
+
+    // Get total count for pagination
+    const total = await prisma.vendor.count({ where: whereClause });
 
     const vendors = await prisma.vendor.findMany({
       where: whereClause,
       include: {
         inventory: true,
       },
-      orderBy: { rating: 'desc' },
+      orderBy: orderByClause,
+      skip,
+      take: pageSize,
     });
 
-    return res.status(200).json({ vendors });
+    return res.status(200).json({
+      vendors,
+      pagination: {
+        total,
+        page: pageNum,
+        limit: pageSize,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    });
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Server error fetching vendors' });
   }
