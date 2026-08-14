@@ -276,6 +276,44 @@ model Wishlist {
   @@unique([userId, serviceId])
 }
 
+model VendorAvailability {
+  id String @id @default(uuid())
+
+  vendorId String
+
+  date     DateTime
+  startTime String
+  endTime   String
+
+  isAvailable Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+  @@index([date])
+}
+
+model Blackout {
+  id String @id @default(uuid())
+
+  vendorId String
+
+  dateStart DateTime
+  dateEnd   DateTime
+
+  reason String?
+
+  createdAt DateTime @default(now())
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+  @@index([dateStart])
+}
+
 enum Role {
   CLIENT
   VENDOR
