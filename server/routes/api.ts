@@ -7,7 +7,9 @@ import * as marketplace from '../controllers/marketplace';
 import * as notifications from '../controllers/notifications';
 import * as reels from '../controllers/reels';
 import * as services from '../controllers/services';
+import * as media from '../controllers/media';
 import { authenticateJWT, requireRole } from '../middlewares/auth';
+import { upload } from '../config/cloudinary';
 
 const router = Router();
 
@@ -15,6 +17,8 @@ const router = Router();
 router.post('/auth/register', auth.register);
 router.post('/auth/login', auth.login);
 router.get('/auth/me', authenticateJWT, auth.me);
+router.get('/media/upload-status', media.getMediaUploadStatus);
+router.post('/media/upload', authenticateJWT, upload.single('file'), media.uploadMedia);
 
 // --- VENDOR ENDPOINTS ---
 router.get('/vendors', vendors.getAll);

@@ -89,12 +89,27 @@ export default function VendorCommandCenterPage({
   const [newInvHourly, setNewInvHourly] = useState(150);
   const [newInvDaily, setNewInvDaily] = useState(1000);
   const [newInvImagePreset, setNewInvImagePreset] = useState('sofa');
+  const [newInvUploadFile, setNewInvUploadFile] = useState<File | null>(null);
+  const [newInvUploadPreview, setNewInvUploadPreview] = useState<string | null>(null);
+  const [newInvUploadLoading, setNewInvUploadLoading] = useState(false);
+  const [newInvUploadError, setNewInvUploadError] = useState<string | null>(null);
 
   // New Used Gear Form State
   const [newGearName, setNewGearName] = useState('');
   const [newGearRetail, setNewGearRetail] = useState(30000);
   const [newGearCondition, setNewGearCondition] = useState<'Mint' | 'Excellent' | 'Good' | 'Fair'>('Excellent');
   const [newGearAge, setNewGearAge] = useState(6);
+  const [newGearUploadFile, setNewGearUploadFile] = useState<File | null>(null);
+  const [newGearUploadPreview, setNewGearUploadPreview] = useState<string | null>(null);
+  const [newGearUploadLoading, setNewGearUploadLoading] = useState(false);
+  const [newGearUploadError, setNewGearUploadError] = useState<string | null>(null);
+
+  // Reels form state
+  const [newReelTitle, setNewReelTitle] = useState('');
+  const [newReelUploadFile, setNewReelUploadFile] = useState<File | null>(null);
+  const [newReelUploadPreview, setNewReelUploadPreview] = useState<string | null>(null);
+  const [newReelUploadLoading, setNewReelUploadLoading] = useState(false);
+  const [newReelUploadError, setNewReelUploadError] = useState<string | null>(null);
 
   // Dynamic AI Pricing Tool States
   const [calcBase, setCalcBase] = useState(15000);
@@ -102,11 +117,78 @@ export default function VendorCommandCenterPage({
   const [calcDistance, setCalcDistance] = useState(15);
   const [calcCrew, setCalcCrew] = useState(4);
 
-  // Reels form state
-  const [newReelTitle, setNewReelTitle] = useState('');
+  // Real authenticated user/vendor context for media uploads
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentVendor, setCurrentVendor] = useState<any>(null);
+  const [currentVendorServices, setCurrentVendorServices] = useState<any[]>([]);
 
-  // Notifications filtering state
+  // Profile / vendor / service media upload state
+  const [profileUploadFile, setProfileUploadFile] = useState<File | null>(null);
+  const [profileUploadPreview, setProfileUploadPreview] = useState<string | null>(null);
+  const [profileUploadLoading, setProfileUploadLoading] = useState(false);
+  const [profileUploadError, setProfileUploadError] = useState<string | null>(null);
+  const [vendorLogoUploadFile, setVendorLogoUploadFile] = useState<File | null>(null);
+  const [vendorLogoUploadPreview, setVendorLogoUploadPreview] = useState<string | null>(null);
+  const [vendorLogoUploadLoading, setVendorLogoUploadLoading] = useState(false);
+  const [vendorLogoUploadError, setVendorLogoUploadError] = useState<string | null>(null);
+  const [vendorCoverUploadFile, setVendorCoverUploadFile] = useState<File | null>(null);
+  const [vendorCoverUploadPreview, setVendorCoverUploadPreview] = useState<string | null>(null);
+  const [vendorCoverUploadLoading, setVendorCoverUploadLoading] = useState(false);
+  const [vendorCoverUploadError, setVendorCoverUploadError] = useState<string | null>(null);
+  const [serviceCoverUploadFile, setServiceCoverUploadFile] = useState<File | null>(null);
+  const [serviceCoverUploadPreview, setServiceCoverUploadPreview] = useState<string | null>(null);
+  const [serviceCoverUploadLoading, setServiceCoverUploadLoading] = useState(false);
+  const [serviceCoverUploadError, setServiceCoverUploadError] = useState<string | null>(null);
+
+  const profileUploadTargetId = currentUser?.id || null;
+  const vendorUploadTargetId = currentVendor?.id || null;
+  const serviceCoverTargetId = currentVendorServices[0]?.id || null;
+
   const [notifFilter, setNotifFilter] = useState<'all' | 'inquiry' | 'payment' | 'system' | 'alert'>('all');
+
+  useEffect(() => {
+    const loadAuthenticatedSession = async () => {
+      const token = localStorage.getItem('vendoora_token');
+      if (!token) return;
+
+      try {
+        const meResponse = await fetch('/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!meResponse.ok) return;
+
+        const mePayload = await meResponse.json();
+        const user = mePayload?.user;
+
+        if (!user) return;
+
+        setCurrentUser(user);
+
+        const vendorId = user?.vendor?.id || user?.vendorId || null;
+        if (vendorId) {
+          const vendorResponse = await fetch(`/api/vendors/${vendorId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const vendorPayload = await vendorResponse.json();
+          if (vendorPayload?.vendor) {
+            setCurrentVendor(vendorPayload.vendor);
+          }
+        }
+
+        const servicesResponse = await fetch('/api/services');
+        const servicesPayload = await servicesResponse.json();
+        const vendorServices = Array.isArray(servicesPayload?.services)
+          ? servicesPayload.services.filter((service: any) => service.vendorId === vendorId || service.vendor?.id === vendorId)
+          : [];
+        setCurrentVendorServices(vendorServices);
+      } catch (error) {
+        console.warn('Unable to load authenticated media context:', error);
+      }
+    };
+
+    loadAuthenticatedSession();
+  }, []);
 
   // Verification code validation is simple: any 4+ digits releases HDFC settlement
   const handleVerifyOtpSubmit = (e: FormEvent) => {
@@ -147,7 +229,7 @@ export default function VendorCommandCenterPage({
   const pendingBookingsCount = bookings.filter((b) => b.status === 'pending').length;
 
   // Add new inventory handler
-  const handleAddNewInventorySubmit = (e: FormEvent) => {
+  const handleAddNewInventorySubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!newInvName.trim()) return;
 
@@ -160,87 +242,137 @@ export default function VendorCommandCenterPage({
       imageUrl = 'https://images.unsplash.com/photo-1533105079780-92b9be482077?auto=format&fit=crop&q=80&w=400';
     }
 
-    const newItem = {
-      id: `i-${Date.now()}`,
-      name: newInvName,
-      units: newInvUnits,
-      hourlyRate: newInvHourly,
-      dailyRate: newInvDaily,
-      image: imageUrl,
-    };
+    try {
+      const uploadedUrl = await uploadMediaFile({
+        resourceType: 'inventoryImage',
+        file: newInvUploadFile,
+        targetId: vendorUploadTargetId,
+        fallbackUrl: imageUrl,
+        onError: setNewInvUploadError,
+        onLoading: setNewInvUploadLoading,
+      });
+      const newItem = {
+        id: `i-${Date.now()}`,
+        name: newInvName,
+        units: newInvUnits,
+        hourlyRate: newInvHourly,
+        dailyRate: newInvDaily,
+        image: uploadedUrl,
+      };
 
-    onAddInventoryItem(newItem);
+      onAddInventoryItem(newItem);
 
-    onAddNotification({
-      id: `n-${Date.now()}`,
-      title: 'Inventory Feed Expanded',
-      message: `Successfully listed "${newInvName}" (${newInvUnits} Units) in your live customer catalog.`,
-      time: 'Just now',
-      type: 'system',
-      read: false,
-    });
+      onAddNotification({
+        id: `n-${Date.now()}`,
+        title: 'Inventory Feed Expanded',
+        message: `Successfully listed "${newInvName}" (${newInvUnits} Units) in your live customer catalog.`,
+        time: 'Just now',
+        type: 'system',
+        read: false,
+      });
 
-    setNewInvName('');
-    alert(`Success! "${newInvName}" has been added to your live inventory feed.`);
+      setNewInvName('');
+      setNewInvUploadFile(null);
+      setNewInvUploadPreview(null);
+      setNewInvUploadError(null);
+      alert(`Success! "${newInvName}" has been added to your live inventory feed.`);
+    } catch (error: any) {
+      setNewInvUploadError(error?.message || 'Unable to upload the inventory image.');
+    }
   };
 
   // Add used gear product
-  const handleAddUsedGearSubmit = (e: FormEvent) => {
+  const handleAddUsedGearSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!newGearName.trim()) return;
 
     const suggestedPrice = computeSuggestedPrice(newGearRetail, newGearCondition, newGearAge);
+    const fallbackImage = 'https://images.unsplash.com/photo-1545454675-3531b543be5d?auto=format&fit=crop&q=80&w=800';
 
-    const newProd = {
-      id: `p-${Date.now()}`,
-      name: newGearName,
-      price: suggestedPrice,
-      condition: newGearCondition,
-      location: 'Mumbai, MH',
-      image: 'https://images.unsplash.com/photo-1545454675-3531b543be5d?auto=format&fit=crop&q=80&w=800',
-    };
+    try {
+      const uploadedImage = await uploadMediaFile({
+        resourceType: 'productImage',
+        file: newGearUploadFile,
+        targetId: currentUser?.id || vendorUploadTargetId,
+        fallbackUrl: fallbackImage,
+        onError: setNewGearUploadError,
+        onLoading: setNewGearUploadLoading,
+      });
 
-    onAddProduct(newProd);
+      const newProd = {
+        id: `p-${Date.now()}`,
+        name: newGearName,
+        price: suggestedPrice,
+        condition: newGearCondition,
+        location: 'Mumbai, MH',
+        image: uploadedImage,
+      };
 
-    onAddNotification({
-      id: `n-${Date.now()}`,
-      title: 'Secondary Listing Published',
-      message: `Pre-owned "${newGearName}" is now active in the Vendoora equipment marketplace. Resale Price: ₹${suggestedPrice.toLocaleString('en-IN')}.`,
-      time: 'Just now',
-      type: 'system',
-      read: false,
-    });
+      onAddProduct(newProd);
 
-    setNewGearName('');
-    alert(`Success! Your equipment "${newGearName}" has been published to the secondary marketplace for users!`);
+      onAddNotification({
+        id: `n-${Date.now()}`,
+        title: 'Secondary Listing Published',
+        message: `Pre-owned "${newGearName}" is now active in the Vendoora equipment marketplace. Resale Price: ₹${suggestedPrice.toLocaleString('en-IN')}.`,
+        time: 'Just now',
+        type: 'system',
+        read: false,
+      });
+
+      setNewGearName('');
+      setNewGearUploadFile(null);
+      setNewGearUploadPreview(null);
+      setNewGearUploadError(null);
+      alert(`Success! Your equipment "${newGearName}" has been published to the secondary marketplace for users!`);
+    } catch (error: any) {
+      setNewGearUploadError(error?.message || 'Unable to upload marketplace image.');
+    }
   };
 
   // Add vibe reel handler
-  const handlePublishReelSubmit = (e: FormEvent) => {
+  const handlePublishReelSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!newReelTitle.trim()) return;
 
-    const newReel = {
-      id: `r-${Date.now()}`,
-      title: newReelTitle,
-      thumbnail: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=500',
-      views: '1.2K',
-      duration: '0:15',
-    };
+    const fallbackThumbnail = 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=500';
 
-    onAddReel(newReel);
+    try {
+      const uploadedThumbnail = await uploadMediaFile({
+        resourceType: 'reelThumbnail',
+        file: newReelUploadFile,
+        targetId: vendorUploadTargetId,
+        fallbackUrl: fallbackThumbnail,
+        onError: setNewReelUploadError,
+        onLoading: setNewReelUploadLoading,
+      });
 
-    onAddNotification({
-      id: `n-${Date.now()}`,
-      title: 'Vibe Reel Published',
-      message: `Your new 15s visual showcase "${newReelTitle}" is now live on the Vendoora exploration tray.`,
-      time: 'Just now',
-      type: 'system',
-      read: false,
-    });
+      const newReel = {
+        id: `r-${Date.now()}`,
+        title: newReelTitle,
+        thumbnail: uploadedThumbnail,
+        views: '1.2K',
+        duration: '0:15',
+      };
 
-    setNewReelTitle('');
-    alert('Prisitine 15-second reel published live to the user feed!');
+      onAddReel(newReel);
+
+      onAddNotification({
+        id: `n-${Date.now()}`,
+        title: 'Vibe Reel Published',
+        message: `Your new 15s visual showcase "${newReelTitle}" is now live on the Vendoora exploration tray.`,
+        time: 'Just now',
+        type: 'system',
+        read: false,
+      });
+
+      setNewReelTitle('');
+      setNewReelUploadFile(null);
+      setNewReelUploadPreview(null);
+      setNewReelUploadError(null);
+      alert('Prisitine 15-second reel published live to the user feed!');
+    } catch (error: any) {
+      setNewReelUploadError(error?.message || 'Unable to upload the reel thumbnail.');
+    }
   };
 
   // Simulation generator
@@ -326,6 +458,139 @@ export default function VendorCommandCenterPage({
 
   const calculatedQuote = calculateAiQuote();
 
+  const uploadMediaFile = async ({
+    resourceType,
+    file,
+    targetId,
+    fallbackUrl,
+    onError,
+    onLoading,
+  }: {
+    resourceType: 'userProfile' | 'vendorLogo' | 'vendorCover' | 'serviceCover' | 'inventoryImage' | 'productImage' | 'reelThumbnail';
+    file: File | null;
+    targetId: string | null;
+    fallbackUrl: string;
+    onError: (message: string | null) => void;
+    onLoading: (state: boolean) => void;
+  }): Promise<string> => {
+    if (!file) {
+      return fallbackUrl;
+    }
+
+    if (!targetId) {
+      onError('No authenticated profile or vendor record is available for this upload.');
+      return fallbackUrl;
+    }
+
+    const storedToken = localStorage.getItem('vendoora_token');
+
+    onLoading(true);
+    onError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('resourceType', resourceType);
+      formData.append('targetId', targetId);
+
+      const response = await fetch('/api/media/upload', {
+        method: 'POST',
+        headers: storedToken ? { Authorization: `Bearer ${storedToken}` } : undefined,
+        body: formData,
+      });
+
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Media upload failed.');
+      }
+
+      return payload?.media?.url || fallbackUrl;
+    } catch (error: any) {
+      const message = error?.message || 'Unable to upload the selected image.';
+      onError(message);
+      return fallbackUrl;
+    } finally {
+      onLoading(false);
+    }
+  };
+
+  const handleProfileImageUpload = async () => {
+    if (!profileUploadFile) return;
+
+    const uploadedUrl = await uploadMediaFile({
+      resourceType: 'userProfile',
+      file: profileUploadFile,
+      targetId: profileUploadTargetId,
+      fallbackUrl: currentUser?.profileImage || 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=500',
+      onError: setProfileUploadError,
+      onLoading: setProfileUploadLoading,
+    });
+
+    if (currentUser) {
+      setCurrentUser({ ...currentUser, profileImage: uploadedUrl });
+    }
+    setProfileUploadFile(null);
+    setProfileUploadPreview(null);
+  };
+
+  const handleVendorLogoUpload = async () => {
+    if (!vendorLogoUploadFile) return;
+
+    const uploadedUrl = await uploadMediaFile({
+      resourceType: 'vendorLogo',
+      file: vendorLogoUploadFile,
+      targetId: vendorUploadTargetId,
+      fallbackUrl: currentVendor?.logo || 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=500',
+      onError: setVendorLogoUploadError,
+      onLoading: setVendorLogoUploadLoading,
+    });
+
+    if (currentVendor) {
+      setCurrentVendor({ ...currentVendor, logo: uploadedUrl });
+    }
+    setVendorLogoUploadFile(null);
+    setVendorLogoUploadPreview(null);
+  };
+
+  const handleVendorCoverUpload = async () => {
+    if (!vendorCoverUploadFile) return;
+
+    const uploadedUrl = await uploadMediaFile({
+      resourceType: 'vendorCover',
+      file: vendorCoverUploadFile,
+      targetId: vendorUploadTargetId,
+      fallbackUrl: currentVendor?.coverImage || 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=500',
+      onError: setVendorCoverUploadError,
+      onLoading: setVendorCoverUploadLoading,
+    });
+
+    if (currentVendor) {
+      setCurrentVendor({ ...currentVendor, coverImage: uploadedUrl });
+    }
+    setVendorCoverUploadFile(null);
+    setVendorCoverUploadPreview(null);
+  };
+
+  const handleServiceCoverUpload = async () => {
+    if (!serviceCoverUploadFile) return;
+
+    const uploadedUrl = await uploadMediaFile({
+      resourceType: 'serviceCover',
+      file: serviceCoverUploadFile,
+      targetId: serviceCoverTargetId,
+      fallbackUrl: currentVendorServices[0]?.coverImage || 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=500',
+      onError: setServiceCoverUploadError,
+      onLoading: setServiceCoverUploadLoading,
+    });
+
+    if (currentVendorServices[0]) {
+      setCurrentVendorServices((prev) => prev.map((service, index) => (index === 0 ? { ...service, coverImage: uploadedUrl } : service)));
+    }
+    setServiceCoverUploadFile(null);
+    setServiceCoverUploadPreview(null);
+  };
+
   return (
     <div
       id={id || 'vendor-command-center'}
@@ -359,12 +624,92 @@ export default function VendorCommandCenterPage({
             <div className="p-4 border-b border-zinc-900 flex items-center justify-between">
               <div>
                 <span className="text-[9px] font-black tracking-widest text-[#6366F1] uppercase">Vendoora Elite</span>
-                <h3 className="font-heading font-black text-white text-base mt-0.5 uppercase tracking-tight">Sharma Tent House</h3>
+                <h3 className="font-heading font-black text-white text-base mt-0.5 uppercase tracking-tight">{currentVendor?.businessName || 'Sharma Tent House'}</h3>
                 <div className="flex items-center gap-1.5 mt-1">
                   <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
                   <span className="text-xs font-bold text-zinc-300">4.85 Rating</span>
                   <Badge variant="success" size="sm" className="scale-90 origin-left">Verified</Badge>
                 </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-b border-zinc-900 space-y-3">
+              <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Media Uploads</h4>
+
+              <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-950/40 p-2.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Profile image</label>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] || null;
+                    setProfileUploadFile(file);
+                    setProfileUploadPreview(file ? URL.createObjectURL(file) : null);
+                    setProfileUploadError(null);
+                  }}
+                  className="block w-full text-[10px] text-zinc-300 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-500/10 file:px-2 file:py-1 file:text-[10px] file:font-bold file:text-indigo-300"
+                />
+                {profileUploadPreview && <img src={profileUploadPreview} alt="Profile preview" className="h-16 w-full rounded-lg object-cover border border-zinc-800" />}
+                {profileUploadLoading && <p className="text-[10px] text-indigo-300">Uploading profile…</p>}
+                {profileUploadError && <p className="text-[10px] text-red-400">{profileUploadError}</p>}
+                <Button type="button" variant="secondary" size="sm" onClick={handleProfileImageUpload} className="w-full text-[10px] font-bold uppercase tracking-wide">Upload profile</Button>
+              </div>
+
+              <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-950/40 p-2.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Vendor logo</label>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] || null;
+                    setVendorLogoUploadFile(file);
+                    setVendorLogoUploadPreview(file ? URL.createObjectURL(file) : null);
+                    setVendorLogoUploadError(null);
+                  }}
+                  className="block w-full text-[10px] text-zinc-300 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-500/10 file:px-2 file:py-1 file:text-[10px] file:font-bold file:text-indigo-300"
+                />
+                {vendorLogoUploadPreview && <img src={vendorLogoUploadPreview} alt="Vendor logo preview" className="h-16 w-full rounded-lg object-cover border border-zinc-800" />}
+                {vendorLogoUploadLoading && <p className="text-[10px] text-indigo-300">Uploading logo…</p>}
+                {vendorLogoUploadError && <p className="text-[10px] text-red-400">{vendorLogoUploadError}</p>}
+                <Button type="button" variant="secondary" size="sm" onClick={handleVendorLogoUpload} className="w-full text-[10px] font-bold uppercase tracking-wide">Upload logo</Button>
+              </div>
+
+              <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-950/40 p-2.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Vendor cover</label>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] || null;
+                    setVendorCoverUploadFile(file);
+                    setVendorCoverUploadPreview(file ? URL.createObjectURL(file) : null);
+                    setVendorCoverUploadError(null);
+                  }}
+                  className="block w-full text-[10px] text-zinc-300 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-500/10 file:px-2 file:py-1 file:text-[10px] file:font-bold file:text-indigo-300"
+                />
+                {vendorCoverUploadPreview && <img src={vendorCoverUploadPreview} alt="Vendor cover preview" className="h-16 w-full rounded-lg object-cover border border-zinc-800" />}
+                {vendorCoverUploadLoading && <p className="text-[10px] text-indigo-300">Uploading cover…</p>}
+                {vendorCoverUploadError && <p className="text-[10px] text-red-400">{vendorCoverUploadError}</p>}
+                <Button type="button" variant="secondary" size="sm" onClick={handleVendorCoverUpload} className="w-full text-[10px] font-bold uppercase tracking-wide">Upload cover</Button>
+              </div>
+
+              <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-950/40 p-2.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Service cover</label>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] || null;
+                    setServiceCoverUploadFile(file);
+                    setServiceCoverUploadPreview(file ? URL.createObjectURL(file) : null);
+                    setServiceCoverUploadError(null);
+                  }}
+                  className="block w-full text-[10px] text-zinc-300 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-500/10 file:px-2 file:py-1 file:text-[10px] file:font-bold file:text-indigo-300"
+                />
+                {serviceCoverUploadPreview && <img src={serviceCoverUploadPreview} alt="Service cover preview" className="h-16 w-full rounded-lg object-cover border border-zinc-800" />}
+                {serviceCoverUploadLoading && <p className="text-[10px] text-indigo-300">Uploading service cover…</p>}
+                {serviceCoverUploadError && <p className="text-[10px] text-red-400">{serviceCoverUploadError}</p>}
+                <Button type="button" variant="secondary" size="sm" onClick={handleServiceCoverUpload} className="w-full text-[10px] font-bold uppercase tracking-wide">Upload service cover</Button>
               </div>
             </div>
 
@@ -846,6 +1191,26 @@ export default function VendorCommandCenterPage({
                           </div>
                         </div>
 
+                        <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-950/40 p-3">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Inventory Image Upload</label>
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp,image/gif"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0] || null;
+                              setNewInvUploadFile(file);
+                              setNewInvUploadPreview(file ? URL.createObjectURL(file) : null);
+                              setNewInvUploadError(null);
+                            }}
+                            className="block w-full text-[10px] text-zinc-300 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-500/10 file:px-2 file:py-1 file:text-[10px] file:font-bold file:text-indigo-300"
+                          />
+                          {newInvUploadPreview && (
+                            <img src={newInvUploadPreview} alt="Inventory preview" className="h-20 w-full rounded-lg object-cover border border-zinc-800" />
+                          )}
+                          {newInvUploadLoading && <p className="text-[10px] text-indigo-300">Uploading image…</p>}
+                          {newInvUploadError && <p className="text-[10px] text-red-400">{newInvUploadError}</p>}
+                        </div>
+
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Hourly Rate (₹/hr)</label>
@@ -1170,6 +1535,26 @@ export default function VendorCommandCenterPage({
                           />
                         </div>
 
+                        <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-950/40 p-3">
+                          <label className="text-[10px] font-bold uppercase block text-zinc-400">Marketplace Image Upload</label>
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp,image/gif"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0] || null;
+                              setNewGearUploadFile(file);
+                              setNewGearUploadPreview(file ? URL.createObjectURL(file) : null);
+                              setNewGearUploadError(null);
+                            }}
+                            className="block w-full text-[10px] text-zinc-300 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-500/10 file:px-2 file:py-1 file:text-[10px] file:font-bold file:text-indigo-300"
+                          />
+                          {newGearUploadPreview && (
+                            <img src={newGearUploadPreview} alt="Marketplace preview" className="h-20 w-full rounded-lg object-cover border border-zinc-800" />
+                          )}
+                          {newGearUploadLoading && <p className="text-[10px] text-indigo-300">Uploading image…</p>}
+                          {newGearUploadError && <p className="text-[10px] text-red-400">{newGearUploadError}</p>}
+                        </div>
+
                         {/* Suggested AI Price widget */}
                         <div className="bg-zinc-950 border border-zinc-850 p-4 rounded-xl flex items-center justify-between">
                           <div className="flex items-center gap-2">
@@ -1241,18 +1626,40 @@ export default function VendorCommandCenterPage({
                     <h4 className="font-heading font-semibold text-white text-base">Your Active Reels Index ({reels.length})</h4>
                     
                     {/* Inline Form to Publish Reel */}
-                    <form onSubmit={handlePublishReelSubmit} className="flex gap-2 w-full sm:w-auto shrink-0">
-                      <Input
-                        type="text"
-                        required
-                        placeholder="Reel title (e.g. Wedding Canopy...)"
-                        value={newReelTitle}
-                        onChange={(e) => setNewReelTitle(e.target.value)}
-                        className="bg-zinc-950 border-zinc-800 text-xs w-48 py-1.5"
-                      />
-                      <Button type="submit" variant="primary" className="py-2.5 font-bold text-xs uppercase px-4 shrink-0">
-                        Publish Reel
-                      </Button>
+                    <form onSubmit={handlePublishReelSubmit} className="flex flex-col gap-2 w-full sm:w-auto shrink-0">
+                      <div className="flex gap-2 w-full sm:w-auto">
+                        <Input
+                          type="text"
+                          required
+                          placeholder="Reel title (e.g. Wedding Canopy...)"
+                          value={newReelTitle}
+                          onChange={(e) => setNewReelTitle(e.target.value)}
+                          className="bg-zinc-950 border-zinc-800 text-xs w-48 py-1.5"
+                        />
+                        <Button type="submit" variant="primary" className="py-2.5 font-bold text-xs uppercase px-4 shrink-0">
+                          Publish Reel
+                        </Button>
+                      </div>
+
+                      <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-950/40 p-2.5 min-w-[220px]">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Thumbnail Upload</label>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/gif"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0] || null;
+                            setNewReelUploadFile(file);
+                            setNewReelUploadPreview(file ? URL.createObjectURL(file) : null);
+                            setNewReelUploadError(null);
+                          }}
+                          className="block w-full text-[10px] text-zinc-300 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-500/10 file:px-2 file:py-1 file:text-[10px] file:font-bold file:text-indigo-300"
+                        />
+                        {newReelUploadPreview && (
+                          <img src={newReelUploadPreview} alt="Reel preview" className="h-20 w-full rounded-lg object-cover border border-zinc-800" />
+                        )}
+                        {newReelUploadLoading && <p className="text-[10px] text-indigo-300">Uploading thumbnail…</p>}
+                        {newReelUploadError && <p className="text-[10px] text-red-400">{newReelUploadError}</p>}
+                      </div>
                     </form>
                   </div>
 
