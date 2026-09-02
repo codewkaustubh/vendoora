@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { Response } from 'express';
 import Razorpay from 'razorpay';
 import { prisma } from '../config/db';
+import { createNotification } from './notifications';
 import { ensureOrderForPaidBooking } from './orders';
 
 const CURRENCY = 'INR';
@@ -120,6 +121,7 @@ export async function verifyPayment(req: any, res: Response) {
       const order = await ensureOrderForPaidBooking(tx, booking.id);
       return { payment, booking: updatedBooking, order };
     });
+    await createNotification(booking.clientId, 'Payment successful', `Payment for "${booking.eventName}" was verified successfully.`, 'payment');
     return res.status(200).json({ message: 'Payment verified successfully', ...updated });
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Server error verifying payment' });
@@ -134,6 +136,7 @@ export async function markFailed(req: any, res: Response) {
     const reason = String(req.body.reason || 'Payment failed or was cancelled');
     const payment = await prisma.payment.update({ where: { id: booking.payment.id }, data: { status: 'FAILED', failureReason: reason } });
     await prisma.booking.update({ where: { id: booking.id }, data: { paymentStatus: 'FAILED' } });
+    await createNotification(booking.clientId, 'Payment failed', `Payment for "${booking.eventName}" was not completed. You can retry.`, 'payment');
     return res.status(200).json({ payment });
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Server error recording payment failure' });
@@ -170,12 +173,14 @@ export async function refundPayment(req: any, res: Response) {
         if (refundedOrder) await tx.order.update({ where: { id: refundedOrder.id }, data: { status: 'CANCELLED' } });
         return { payment, booking: updatedBooking };
       });
+        await createNotification(booking.clientId, 'Booking cancelled', `Your booking for "${booking.eventName}" was cancelled and refunded.`, 'booking');
       return res.status(200).json({ message: 'Booking cancelled and payment refunded', ...updated });
     }
 
     const updatedBooking = await prisma.booking.update({ where: { id: booking.id }, data: { status: 'DECLINED', cancellationReason: String(req.body.reason || 'Cancelled by customer') } });
     const cancelledOrder = await prisma.order.findUnique({ where: { bookingId: booking.id } });
     if (cancelledOrder) await prisma.order.update({ where: { id: cancelledOrder.id }, data: { status: 'CANCELLED' } });
+    await createNotification(booking.clientId, 'Booking cancelled', `Your booking for "${booking.eventName}" was cancelled.`, 'booking');
     return res.status(200).json({ message: 'Booking cancelled', booking: updatedBooking, payment: booking.payment });
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Server error cancelling booking' });

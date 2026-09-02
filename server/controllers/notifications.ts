@@ -1,6 +1,24 @@
 import { Response } from 'express';
 import { prisma } from '../config/db';
 
+export function buildNotificationData(userId: string, title: string, message: string, type: string) {
+  return { userId, title, message, type, time: 'Just now', read: false };
+}
+
+export async function createNotification(userId: string, title: string, message: string, type: string) {
+  return prisma.notification.create({
+    data: buildNotificationData(userId, title, message, type),
+  });
+}
+
+export function canReadNotification(notification: { userId: string } | null, userId: string): boolean {
+  return Boolean(notification && notification.userId === userId);
+}
+
+export function isUnread(notification: { read: boolean }): boolean {
+  return !notification.read;
+}
+
 export async function getUserNotifications(req: any, res: Response) {
   try {
     const notifications = await prisma.notification.findMany({
@@ -26,7 +44,7 @@ export async function markRead(req: any, res: Response) {
       return res.status(404).json({ error: 'Notification not found' });
     }
 
-    if (notif.userId !== req.user.id) {
+    if (!canReadNotification(notif, req.user.id)) {
       return res.status(403).json({ error: 'Forbidden: You do not own this notification' });
     }
 

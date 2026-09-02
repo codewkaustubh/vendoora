@@ -154,6 +154,8 @@ export default function VendorCommandCenterPage({
   const [paymentSummary, setPaymentSummary] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
   const [orderError, setOrderError] = useState<string | null>(null);
+  const [receivedReviews, setReceivedReviews] = useState<any[]>([]);
+  const [persistedNotifications, setPersistedNotifications] = useState<any[]>([]);
 
   const profileUploadTargetId = currentUser?.id || null;
   const vendorUploadTargetId = currentVendor?.id || null;
@@ -204,6 +206,12 @@ export default function VendorCommandCenterPage({
           const ordersResponse = await fetch('/api/orders/vendor', { headers: { Authorization: `Bearer ${token}` } });
           const ordersPayload = await ordersResponse.json().catch(() => ({}));
           if (ordersResponse.ok) setOrders(Array.isArray(ordersPayload?.orders) ? ordersPayload.orders : []);
+          const reviewsResponse = await fetch('/api/reviews/vendor', { headers: { Authorization: `Bearer ${token}` } });
+          const reviewsPayload = await reviewsResponse.json().catch(() => ({}));
+          if (reviewsResponse.ok) setReceivedReviews(Array.isArray(reviewsPayload?.reviews) ? reviewsPayload.reviews : []);
+          const notificationsResponse = await fetch('/api/notifications', { headers: { Authorization: `Bearer ${token}` } });
+          const notificationsPayload = await notificationsResponse.json().catch(() => ({}));
+          if (notificationsResponse.ok) setPersistedNotifications(Array.isArray(notificationsPayload?.notifications) ? notificationsPayload.notifications : []);
         }
 
         const servicesResponse = await fetch('/api/services');
@@ -384,7 +392,8 @@ export default function VendorCommandCenterPage({
   const isCritical = secondsLeft < 2 * 3600;
 
   // Derive active items & counts
-  const unreadNotifCount = notifications.filter((n) => !n.read).length;
+  const visibleNotifications = persistedNotifications.length ? persistedNotifications : notifications;
+  const unreadNotifCount = visibleNotifications.filter((n) => !n.read).length;
   const pendingBookingsCount = bookings.filter((b) => b.status === 'pending').length;
 
   // Add new inventory handler
@@ -601,7 +610,7 @@ export default function VendorCommandCenterPage({
   };
 
   // Filtered Notifications
-  const filteredNotifs = notifications.filter((n) => {
+  const filteredNotifs = visibleNotifications.filter((n) => {
     if (notifFilter === 'all') return true;
     return n.type === notifFilter;
   });
@@ -1076,6 +1085,11 @@ export default function VendorCommandCenterPage({
                     </div>
                   </Card>
                 )}
+
+                    <Card variant="glass" className="border-zinc-800 bg-zinc-950/40 rounded-[28px] p-5 space-y-3">
+                      <div className="flex items-center justify-between"><h4 className="font-heading font-semibold text-white text-base">Reviews received ({receivedReviews.length})</h4><span className="text-xs text-amber-400">{receivedReviews.length ? (receivedReviews.reduce((sum, review) => sum + review.rating, 0) / receivedReviews.length).toFixed(1) : '0.0'} / 5</span></div>
+                      {receivedReviews.length === 0 ? <p className="text-xs text-zinc-500">Completed-order reviews will appear here.</p> : receivedReviews.slice(0, 8).map((review) => <div key={review.id} className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-3"><p className="text-xs font-bold text-white">{review.user?.name || 'Customer'} · {review.rating}/5</p><p className="text-xs text-zinc-400 mt-1">{review.comment || 'No comment provided.'}</p></div>)}
+                    </Card>
 
                 <Card variant="glass" className="border-zinc-800 bg-zinc-950/40 backdrop-blur-md rounded-[32px] p-6 md:p-8 space-y-6">
                   <div className="flex justify-between items-center">
@@ -2052,7 +2066,15 @@ export default function VendorCommandCenterPage({
                       {filteredNotifs.map((log) => (
                         <div
                           key={log.id}
-                          onClick={() => onMarkNotificationRead(log.id)}
+                          onClick={async () => {
+                            if (persistedNotifications.length) {
+                              const token = localStorage.getItem('vendoora_token');
+                              if (token) {
+                                const response = await fetch(`/api/notifications/${log.id}/read`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` } });
+                                if (response.ok) setPersistedNotifications((current) => current.map((item) => item.id === log.id ? { ...item, read: true } : item));
+                              }
+                            } else onMarkNotificationRead(log.id);
+                          }}
                           className={`p-4 rounded-xl border transition-all cursor-pointer flex justify-between items-start gap-4 ${log.read ? 'bg-zinc-900/10 border-zinc-900/60 text-zinc-400' : 'bg-[#6366F1]/5 border-[#6366F1]/20 text-zinc-200'}`}
                         >
                           <div className="space-y-1">

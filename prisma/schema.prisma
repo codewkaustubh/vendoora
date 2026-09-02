@@ -262,6 +262,7 @@ model Order {
   updatedAt          DateTime      @updatedAt
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  review  Review?
 
   @@index([status])
   @@index([scheduledDate])
@@ -296,6 +297,7 @@ model Review {
 
   userId   String
   vendorId String
+  orderId  String  @unique
 
   rating Int
 
@@ -306,8 +308,10 @@ model Review {
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([vendorId])
+  @@index([userId])
 }
 
 model Wishlist {

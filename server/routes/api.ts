@@ -12,6 +12,7 @@ import * as discovery from '../controllers/discovery';
 import * as availability from '../controllers/availability';
 import * as payments from '../controllers/payments';
 import * as orders from '../controllers/orders';
+import * as reviews from '../controllers/reviews';
 import { authenticateJWT, requireRole } from '../middlewares/auth';
 import { upload } from '../config/cloudinary';
 
@@ -63,6 +64,12 @@ router.get('/payments/vendor/summary', authenticateJWT, requireRole(['VENDOR']),
 router.get('/orders/client', authenticateJWT, requireRole(['CLIENT', 'ADMIN']), orders.getCustomerOrders);
 router.get('/orders/vendor', authenticateJWT, requireRole(['VENDOR']), orders.getVendorOrders);
 router.put('/orders/:id/status', authenticateJWT, requireRole(['VENDOR']), orders.updateStatus);
+
+// --- REVIEWS ---
+router.post('/reviews', authenticateJWT, requireRole(['CLIENT', 'ADMIN']), reviews.create);
+router.get('/reviews/client', authenticateJWT, requireRole(['CLIENT', 'ADMIN']), reviews.getMine);
+router.get('/reviews/vendor', authenticateJWT, requireRole(['VENDOR']), reviews.getVendorReviews);
+router.get('/reviews/vendor/:vendorId', reviews.getPublicVendorReviews);
 
 // --- SERVICE DISCOVERY ---
 router.post('/services', authenticateJWT, requireRole(['VENDOR']), services.create);

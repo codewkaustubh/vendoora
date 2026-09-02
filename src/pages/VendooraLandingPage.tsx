@@ -138,6 +138,12 @@ export default function VendooraLandingPage({
   const [bookingConfirmation, setBookingConfirmation] = useState<any | null>(null);
   const [paymentActionId, setPaymentActionId] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [customerReviews, setCustomerReviews] = useState<any[]>([]);
+  const [reviewOrderId, setReviewOrderId] = useState('');
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<any[]>([]);
 
   // Modals active state
   const [isBudgetOpen, setIsBudgetOpen] = useState(false);
@@ -196,6 +202,12 @@ export default function VendooraLandingPage({
       if (!response.ok) throw new Error(payload?.error || 'Unable to load your bookings');
       setCustomerBookings(Array.isArray(payload?.bookings) ? payload.bookings : []);
       setCustomerOrders(ordersResponse.ok && Array.isArray(ordersPayload?.orders) ? ordersPayload.orders : []);
+      const reviewsResponse = await fetch('/api/reviews/client', { headers });
+      const reviewsPayload = await reviewsResponse.json().catch(() => ({}));
+      setCustomerReviews(reviewsResponse.ok && Array.isArray(reviewsPayload?.reviews) ? reviewsPayload.reviews : []);
+      const notificationsResponse = await fetch('/api/notifications', { headers });
+      const notificationsPayload = await notificationsResponse.json().catch(() => ({}));
+      setNotifications(notificationsResponse.ok && Array.isArray(notificationsPayload?.notifications) ? notificationsPayload.notifications : []);
     } catch (error) {
       setCustomerBookingsError(error instanceof Error ? error.message : 'Unable to load your bookings');
     } finally {
@@ -471,6 +483,37 @@ export default function VendooraLandingPage({
     } finally {
       setPaymentActionId(null);
     }
+  };
+
+  const submitReview = async (event: FormEvent) => {
+    event.preventDefault();
+    const token = localStorage.getItem('vendoora_token');
+    if (!token) {
+      setReviewError('Please sign in as a customer before reviewing.');
+      return;
+    }
+    setReviewError(null);
+    try {
+      const response = await fetch('/api/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ orderId: reviewOrderId, rating: reviewRating, comment: reviewComment }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || 'Unable to submit review');
+      setCustomerReviews((current) => [payload.review, ...current]);
+      setReviewOrderId('');
+      setReviewComment('');
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : 'Unable to submit review');
+    }
+  };
+
+  const markNotificationRead = async (id: string) => {
+    const token = localStorage.getItem('vendoora_token');
+    if (!token) return;
+    const response = await fetch(`/api/notifications/${id}/read`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` } });
+    if (response.ok) setNotifications((current) => current.map((notification) => notification.id === id ? { ...notification, read: true } : notification));
   };
 
   // Smooth scroll handler for Bottom Navigation mobile interactions
@@ -893,6 +936,25 @@ export default function VendooraLandingPage({
               ))}
             </div>
           )}
+        </section>
+
+        <section id="customer-reviews-root" className="w-full max-w-7xl mx-auto px-4 md:px-6 py-4">
+          <div className="mb-6"><h3 className="font-heading font-bold text-lg md:text-xl text-zinc-900">Your Reviews</h3><p className="text-zinc-500 text-xs mt-0.5">Share feedback after an order is completed.</p></div>
+          {reviewError && <p className="mb-4 text-xs text-red-600">{reviewError}</p>}
+          {customerOrders.filter((order) => order.status === 'COMPLETED' && !customerReviews.some((review) => review.orderId === order.id)).length > 0 && (
+            <form onSubmit={submitReview} className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+              <label className="text-[10px] uppercase font-bold text-zinc-500">Completed order<select required value={reviewOrderId} onChange={(event) => setReviewOrderId(event.target.value)} className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"><option value="">Choose order</option>{customerOrders.filter((order) => order.status === 'COMPLETED' && !customerReviews.some((review) => review.orderId === order.id)).map((order) => <option key={order.id} value={order.id}>{order.booking.eventName}</option>)}</select></label>
+              <label className="text-[10px] uppercase font-bold text-zinc-500">Rating<select value={reviewRating} onChange={(event) => setReviewRating(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs">{[5, 4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating} / 5</option>)}</select></label>
+              <label className="text-[10px] uppercase font-bold text-zinc-500 md:col-span-1">Comment<input value={reviewComment} onChange={(event) => setReviewComment(event.target.value)} className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs" placeholder="Tell the vendor about your experience" /></label>
+              <Button type="submit" size="sm">Submit review</Button>
+            </form>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{customerReviews.map((review) => <Card key={review.id} variant="surface" className="p-4 border-zinc-200"><p className="text-sm font-bold text-zinc-900">{review.vendor?.businessName} · {review.rating}/5</p><p className="text-xs text-zinc-500 mt-1">{review.comment || 'No comment provided.'}</p></Card>)}</div>
+        </section>
+
+        <section id="customer-notifications-root" className="w-full max-w-7xl mx-auto px-4 md:px-6 py-4">
+          <div className="mb-6 flex items-center justify-between"><div><h3 className="font-heading font-bold text-lg md:text-xl text-zinc-900">Notifications</h3><p className="text-zinc-500 text-xs mt-0.5">Booking, payment, order, and review updates.</p></div><Badge variant="primary">{notifications.filter((notification) => !notification.read).length} unread</Badge></div>
+          <div className="space-y-2">{notifications.slice(0, 8).map((notification) => <button key={notification.id} type="button" onClick={() => markNotificationRead(notification.id)} className={`w-full text-left rounded-xl border p-3 ${notification.read ? 'border-zinc-200 bg-white/50' : 'border-indigo-200 bg-indigo-50'}`}><p className="text-xs font-bold text-zinc-900">{notification.title}</p><p className="text-xs text-zinc-500 mt-1">{notification.message}</p></button>)}</div>
         </section>
 
       </main>

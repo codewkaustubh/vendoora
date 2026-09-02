@@ -90,6 +90,20 @@ Orders are created automatically only after both Booking.paymentStatus and the l
 - PUT /api/notifications/read-all
   - Marks all notifications as read
 
+### Reviews
+
+- POST /api/reviews
+  - Authenticated customer creates one 1-5 rating and optional comment for their completed order
+  - Returns 403 when the order is not owned and completed, and 409 for duplicate reviews
+- GET /api/reviews/client
+  - Returns reviews created by the authenticated customer
+- GET /api/reviews/vendor
+  - Returns reviews received by the authenticated vendor
+- GET /api/reviews/vendor/:vendorId
+  - Publicly returns reviews for a vendor profile
+
+Important booking, payment, cancellation, fulfillment, and review events create persisted notifications. Notification reads remain user-owned.
+
 ### Vibe Reels
 
 - POST /api/reels

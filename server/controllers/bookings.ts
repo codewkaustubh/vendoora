@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
 import { checkBookingConflict } from './availability';
+import { createNotification } from './notifications';
 
 export async function create(req: any, res: Response) {
   try {
@@ -86,16 +87,7 @@ export async function create(req: any, res: Response) {
     }
 
     // Notify the vendor
-    await prisma.notification.create({
-      data: {
-        userId: vendor.userId,
-        title: 'New Client Inquiry',
-        message: `${req.user.name || 'A client'} requested services for "${eventName}" on ${date} at ${time}.`,
-        time: 'Just now',
-        type: 'inquiry',
-        read: false,
-      },
-    });
+    await createNotification(vendor.userId, 'New Client Inquiry', `${req.user.name || 'A client'} requested services for "${eventName}" on ${date} at ${time}.`, 'inquiry');
 
     return res.status(201).json({
       message: 'Inquiry placed successfully',
@@ -179,16 +171,7 @@ export async function updateStatus(req: any, res: Response) {
     });
 
     // Notify the client about status update
-    await prisma.notification.create({
-      data: {
-        userId: booking.clientId,
-        title: `Inquiry ${status.toLowerCase()}`,
-        message: `Your booking request for "${booking.eventName}" has been updated to "${status}".`,
-        time: 'Just now',
-        type: 'system',
-        read: false,
-      },
-    });
+    await createNotification(booking.clientId, `Inquiry ${status.toLowerCase()}`, `Your booking request for "${booking.eventName}" has been updated to "${status}".`, 'system');
 
     return res.status(200).json({
       message: 'Booking status updated successfully',

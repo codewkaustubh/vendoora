@@ -100,10 +100,12 @@ Relationships:
 User-facing alerts and system messages.
 
 Key fields:
-- id, userId, title, message, time, type, read
+- id, userId, title, message, time, type, read, readAt, createdAt
 
 Relationships:
 - One User
+
+Notifications are created for booking creation/status changes, payment success/failure, cancellation/refund, fulfillment status changes, and received reviews.
 
 ### Payment
 
@@ -140,11 +142,12 @@ Relationships:
 Customer feedback for a vendor.
 
 Key fields:
-- id, userId, vendorId, rating, comment
+- id, userId, vendorId, orderId, rating, comment, createdAt, updatedAt
 
 Relationships:
 - One User
 - One Vendor
+- One completed Order (unique)
 
 ### Wishlist
 

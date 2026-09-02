@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
+import { createNotification } from './notifications';
 
 export type OrderStatus = 'CONFIRMED' | 'PREPARING' | 'READY' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 
@@ -102,6 +103,7 @@ export async function updateStatus(req: any, res: Response) {
         ...(req.body.trackingReference !== undefined ? { trackingReference: String(req.body.trackingReference) } : {}),
       },
     });
+    await createNotification(order.booking.client.id, 'Order status updated', `Your order for "${order.booking.eventName}" is now ${nextStatus}.`, 'order');
     return res.status(200).json({ order: updated });
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Server error updating order status' });
