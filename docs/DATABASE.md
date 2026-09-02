@@ -115,6 +115,16 @@ Key fields:
 Relationships:
 - One Booking (1:1)
 
+### Order
+
+Stores fulfillment and logistics state for a paid booking.
+
+Key fields:
+- bookingId, status, fulfillmentType, venueAddress, scheduledDate, scheduledStartTime, scheduledEndTime, notes, trackingReference
+
+Relationships:
+- One Booking (1:1)
+
 ### VibeReel
 
 Short-form vendor content for the reels experience.
@@ -155,6 +165,7 @@ Relationships:
 - ProductCondition: MINT, EXCELLENT, GOOD, FAIR
 - PaymentStatus: PENDING, PAID, FAILED, REFUNDED
 - PaymentRecordStatus: PENDING, PAID, FAILED, REFUNDED
+- OrderStatus: CONFIRMED, PREPARING, READY, IN_PROGRESS, COMPLETED, CANCELLED
 
 ## Indexes
 
@@ -164,6 +175,7 @@ The schema defines indexes for:
 - Service vendorId, categoryId, startingPrice
 - Booking clientId, vendorId, serviceId, status
 - Payment bookingId, orderId, paymentId, status
+- Order bookingId, status, scheduledDate
 - Review vendorId
 
 ## Suggested Improvements (No Schema Changes Yet)

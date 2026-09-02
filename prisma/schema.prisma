@@ -215,6 +215,7 @@ model Booking {
   vendor  Vendor   @relation("VendorBookings", fields: [vendorId], references: [id], onDelete: Cascade)
   service Service? @relation(fields: [serviceId], references: [id])
   payment Payment?
+  order   Order?
 
   @@index([clientId])
   @@index([vendorId])
@@ -244,6 +245,26 @@ model Payment {
 
   @@index([status])
   @@index([paymentId])
+}
+
+model Order {
+  id                 String        @id @default(uuid())
+  bookingId          String        @unique
+  status             OrderStatus   @default(CONFIRMED)
+  fulfillmentType    String        @default("EVENT_SERVICE")
+  venueAddress       String
+  scheduledDate      DateTime
+  scheduledStartTime String
+  scheduledEndTime   String?
+  notes              String?
+  trackingReference  String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([scheduledDate])
 }
 
 model Notification {
@@ -380,6 +401,15 @@ enum PaymentRecordStatus {
   PAID
   FAILED
   REFUNDED
+}
+
+enum OrderStatus {
+  CONFIRMED
+  PREPARING
+  READY
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
 }
 
 enum VerificationStatus {

@@ -152,6 +152,8 @@ export default function VendorCommandCenterPage({
   const [serviceCoverUploadLoading, setServiceCoverUploadLoading] = useState(false);
   const [serviceCoverUploadError, setServiceCoverUploadError] = useState<string | null>(null);
   const [paymentSummary, setPaymentSummary] = useState<any>(null);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [orderError, setOrderError] = useState<string | null>(null);
 
   const profileUploadTargetId = currentUser?.id || null;
   const vendorUploadTargetId = currentVendor?.id || null;
@@ -199,6 +201,9 @@ export default function VendorCommandCenterPage({
             headers: { Authorization: `Bearer ${token}` },
           });
           if (paymentSummaryResponse.ok) setPaymentSummary(await paymentSummaryResponse.json());
+          const ordersResponse = await fetch('/api/orders/vendor', { headers: { Authorization: `Bearer ${token}` } });
+          const ordersPayload = await ordersResponse.json().catch(() => ({}));
+          if (ordersResponse.ok) setOrders(Array.isArray(ordersPayload?.orders) ? ordersPayload.orders : []);
         }
 
         const servicesResponse = await fetch('/api/services');
@@ -232,6 +237,31 @@ export default function VendorCommandCenterPage({
       setAcceptingBookings(previousValue);
       window.alert(error instanceof Error ? error.message : 'Unable to persist booking availability');
     }
+  };
+
+  const updateOrderStatus = async (orderId: string, status: string) => {
+    const token = localStorage.getItem('vendoora_token');
+    if (!token) return;
+    setOrderError(null);
+    try {
+      const response = await fetch(`/api/orders/${orderId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || 'Unable to update order status');
+      setOrders((current) => current.map((order) => order.id === orderId ? { ...order, ...payload.order } : order));
+    } catch (error) {
+      setOrderError(error instanceof Error ? error.message : 'Unable to update order status');
+    }
+  };
+
+  const nextOrderStatus: Record<string, string | undefined> = {
+    CONFIRMED: 'PREPARING',
+    PREPARING: 'READY',
+    READY: 'IN_PROGRESS',
+    IN_PROGRESS: 'COMPLETED',
   };
 
   const availabilityRequest = async (path: string, options: RequestInit = {}) => {
@@ -1245,6 +1275,30 @@ export default function VendorCommandCenterPage({
                       ))}
                     </div>
                   )}
+                </Card>
+
+                <Card variant="glass" className="border-zinc-800 bg-zinc-950/40 rounded-[32px] p-6 space-y-4">
+                  <div className="flex items-center justify-between border-b border-zinc-900 pb-4">
+                    <div>
+                      <h4 className="font-heading font-semibold text-white text-base">Fulfillment Orders ({orders.length})</h4>
+                      <p className="text-zinc-500 text-xs mt-0.5">Update paid booking fulfillment through the controlled order lifecycle.</p>
+                    </div>
+                  </div>
+                  {orderError && <p className="text-xs text-red-400">{orderError}</p>}
+                  {orders.length === 0 ? <p className="text-xs text-zinc-500 py-4">Paid bookings will appear here as orders.</p> : orders.map((order) => (
+                    <div key={order.id} className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div>
+                        <h5 className="font-heading font-bold text-white text-sm">{order.booking.eventName}</h5>
+                        <p className="text-xs text-zinc-400">{order.booking.client?.name || 'Customer'} · {String(order.scheduledDate).slice(0, 10)} · {order.scheduledStartTime}</p>
+                        <p className="text-[10px] text-zinc-500">{order.venueAddress}{order.trackingReference ? ` · Ref: ${order.trackingReference}` : ''}</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Badge variant={order.status === 'COMPLETED' ? 'success' : order.status === 'CANCELLED' ? 'danger' : 'primary'}>{order.status}</Badge>
+                        {nextOrderStatus[order.status] && <Button size="sm" onClick={() => updateOrderStatus(order.id, nextOrderStatus[order.status] as string)}>Mark {nextOrderStatus[order.status]}</Button>}
+                        {order.status === 'CONFIRMED' && <Button size="sm" variant="secondary" onClick={() => updateOrderStatus(order.id, 'CANCELLED')}>Cancel</Button>}
+                      </div>
+                    </div>
+                  ))}
                 </Card>
 
                 {/* 2. Dispatch Logistics Timeline */}

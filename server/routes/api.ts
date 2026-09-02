@@ -11,6 +11,7 @@ import * as media from '../controllers/media';
 import * as discovery from '../controllers/discovery';
 import * as availability from '../controllers/availability';
 import * as payments from '../controllers/payments';
+import * as orders from '../controllers/orders';
 import { authenticateJWT, requireRole } from '../middlewares/auth';
 import { upload } from '../config/cloudinary';
 
@@ -57,6 +58,11 @@ router.post('/payments/failed', authenticateJWT, requireRole(['CLIENT', 'ADMIN']
 router.get('/payments/bookings/:bookingId', authenticateJWT, requireRole(['CLIENT', 'ADMIN']), payments.getBookingPayment);
 router.post('/bookings/cancel', authenticateJWT, requireRole(['CLIENT', 'ADMIN']), payments.refundPayment);
 router.get('/payments/vendor/summary', authenticateJWT, requireRole(['VENDOR']), payments.vendorSummary);
+
+// --- ORDERS & FULFILLMENT ---
+router.get('/orders/client', authenticateJWT, requireRole(['CLIENT', 'ADMIN']), orders.getCustomerOrders);
+router.get('/orders/vendor', authenticateJWT, requireRole(['VENDOR']), orders.getVendorOrders);
+router.put('/orders/:id/status', authenticateJWT, requireRole(['VENDOR']), orders.updateStatus);
 
 // --- SERVICE DISCOVERY ---
 router.post('/services', authenticateJWT, requireRole(['VENDOR']), services.create);

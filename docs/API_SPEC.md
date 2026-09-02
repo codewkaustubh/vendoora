@@ -60,6 +60,18 @@ The current API layer is mounted under /api and is implemented using Express rou
 - GET /api/payments/vendor/summary
   - Returns paid booking count, paid/refunded amounts, and pending payment count for the authenticated vendor
 
+### Orders & Fulfillment
+
+- GET /api/orders/client
+  - Returns fulfillment orders for the authenticated customer
+- GET /api/orders/vendor
+  - Returns fulfillment orders for the authenticated vendor
+- PUT /api/orders/:id/status
+  - Vendor-only lifecycle update for CONFIRMED, PREPARING, READY, IN_PROGRESS, COMPLETED, or valid CANCELLED transitions
+  - May also update notes and trackingReference
+
+Orders are created automatically only after both Booking.paymentStatus and the linked Payment status are PAID. Order status does not replace booking or payment state.
+
 ### Marketplace
 
 - POST /api/marketplace/products

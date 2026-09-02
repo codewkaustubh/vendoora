@@ -130,6 +130,7 @@ export default function VendooraLandingPage({
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [availabilityError, setAvailabilityError] = useState<string | null>(null);
   const [customerBookings, setCustomerBookings] = useState<any[]>([]);
+  const [customerOrders, setCustomerOrders] = useState<any[]>([]);
   const [customerBookingsLoading, setCustomerBookingsLoading] = useState(false);
   const [customerBookingsError, setCustomerBookingsError] = useState<string | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
@@ -187,11 +188,14 @@ export default function VendooraLandingPage({
     setCustomerBookingsLoading(true);
     setCustomerBookingsError(null);
     try {
-      const response = await fetch('/api/bookings/client', { headers: { Authorization: `Bearer ${token}` } });
+      const headers = { Authorization: `Bearer ${token}` };
+      const [response, ordersResponse] = await Promise.all([fetch('/api/bookings/client', { headers }), fetch('/api/orders/client', { headers })]);
       const payload = await response.json().catch(() => ({}));
+      const ordersPayload = await ordersResponse.json().catch(() => ({}));
       if (response.status === 401 || response.status === 403) throw new Error('Please sign in as a customer to view bookings');
       if (!response.ok) throw new Error(payload?.error || 'Unable to load your bookings');
       setCustomerBookings(Array.isArray(payload?.bookings) ? payload.bookings : []);
+      setCustomerOrders(ordersResponse.ok && Array.isArray(ordersPayload?.orders) ? ordersPayload.orders : []);
     } catch (error) {
       setCustomerBookingsError(error instanceof Error ? error.message : 'Unable to load your bookings');
     } finally {
@@ -352,7 +356,7 @@ export default function VendooraLandingPage({
       if (response.status === 409) throw new Error(payload?.error || 'That time is no longer available. Please choose another slot.');
       if (!response.ok) throw new Error(payload?.error || 'Unable to submit booking');
 
-      setBookingConfirmation(payload.booking);
+      setBookingConfirmation({ ...payload.booking, order: payload.order });
       await loadCustomerBookings();
       onAddNotification({
         id: `n-${Date.now()}`,
@@ -868,6 +872,7 @@ export default function VendooraLandingPage({
                       <h4 className="font-heading font-bold text-zinc-900">{booking.eventName}</h4>
                       <p className="text-xs text-zinc-500 mt-1">{booking.vendor?.businessName || 'Vendor'} · {String(booking.eventDate).slice(0, 10)}</p>
                       <p className="text-xs text-zinc-500">{booking.startTime}{booking.endTime ? `–${booking.endTime}` : ''} · {booking.venue}</p>
+                      {customerOrders.find((order) => order.bookingId === booking.id) && <p className="text-xs text-indigo-600">Fulfillment: {customerOrders.find((order) => order.bookingId === booking.id).status}</p>}
                     </div>
                     <Badge variant={booking.status === 'DECLINED' ? 'danger' : booking.status === 'COMPLETED' ? 'success' : 'primary'}>{booking.status}</Badge>
                   </div>
