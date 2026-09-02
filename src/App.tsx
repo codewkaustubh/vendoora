@@ -136,8 +136,6 @@ export default function App() {
           onSwitchToVendor={() => setVendorMode(true)}
           reels={reels}
           products={products}
-          bookings={bookings}
-          onAddBooking={handleAddBooking}
           onAddNotification={handleAddNotification}
         />
       ) : (

@@ -10,6 +10,11 @@ import { Input, Button, Badge } from '../design-system';
 import ProductCard from './ProductCard';
 import SectionShell from '../common/SectionShell';
 
+interface MarketplaceDiscoveryProps {
+  onSelectVendor?: (vendor: any) => void;
+  onSelectService?: (service: any) => void;
+}
+
 interface DiscoveryFilters {
   search: string;
   type: 'all' | 'products' | 'services' | 'vendors';
@@ -23,7 +28,7 @@ interface DiscoveryFilters {
   limit: number;
 }
 
-export default function MarketplaceDiscovery() {
+export default function MarketplaceDiscovery({ onSelectVendor, onSelectService }: MarketplaceDiscoveryProps) {
   const [filters, setFilters] = useState<DiscoveryFilters>({
     search: '',
     type: 'products',
@@ -334,6 +339,18 @@ export default function MarketplaceDiscovery() {
                   >
                     {filters.type === 'products' || (filters.type === 'all' && item.price) ? (
                       <ProductCard product={item} />
+                    ) : item.businessName ? (
+                      <button type="button" onClick={() => onSelectVendor?.(item)} className="w-full text-left p-4 rounded-lg border border-zinc-800 bg-zinc-900/50 hover:border-indigo-500/60 transition-colors">
+                        <h3 className="font-semibold text-white mb-2">{item.businessName}</h3>
+                        <p className="text-zinc-400 text-sm mb-3">{item.ownerName}</p>
+                        <span className="text-indigo-400 text-xs">Book this vendor</span>
+                      </button>
+                    ) : item.title ? (
+                      <button type="button" onClick={() => onSelectService?.(item)} className="w-full text-left p-4 rounded-lg border border-zinc-800 bg-zinc-900/50 hover:border-indigo-500/60 transition-colors">
+                        <h3 className="font-semibold text-white mb-2">{item.title}</h3>
+                        <p className="text-zinc-400 text-sm mb-3">{item.vendor?.businessName || 'Service'}</p>
+                        <span className="text-indigo-400 text-xs">Book this service</span>
+                      </button>
                     ) : (
                       <div className="p-4 rounded-lg border border-zinc-800 bg-zinc-900/50">
                         <h3 className="font-semibold text-white mb-2">

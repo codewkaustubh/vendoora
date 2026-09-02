@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import {
   Home as HomeIcon,
   Search as SearchIcon,
@@ -11,6 +11,9 @@ import {
   ShoppingBag as BagIcon,
   Gift as GiftIcon,
   Sparkles,
+  ClipboardList,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 
 // Design System & Curated Components
@@ -38,15 +41,13 @@ import VendorTermsModal from '../components/vendor/VendorTermsModal';
 import LegalModal from '../components/vendoora/LegalModal';
 
 // Mock Data
-import { CATEGORIES, VENDORS } from '../data/vendooraMockData';
+import { CATEGORIES } from '../data/vendooraMockData';
 
 interface VendooraLandingPageProps {
   id?: string;
   onSwitchToVendor: () => void;
   reels?: any[];
   products?: any[];
-  bookings?: any[];
-  onAddBooking: (booking: any) => void;
   onAddNotification: (notification: any) => void;
 }
 
@@ -114,14 +115,26 @@ export default function VendooraLandingPage({
   onSwitchToVendor,
   reels,
   products,
-  bookings,
-  onAddBooking,
   onAddNotification,
 }: VendooraLandingPageProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedLocation, setSelectedLocation] = useState<string>('Mumbai, MH');
   const [activeTab, setActiveTab] = useState('home');
+  const [vendors, setVendors] = useState<any[]>([]);
+  const [services, setServices] = useState<any[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [availability, setAvailability] = useState<any[]>([]);
+  const [availabilityAccepting, setAvailabilityAccepting] = useState(true);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
+  const [customerBookings, setCustomerBookings] = useState<any[]>([]);
+  const [customerBookingsLoading, setCustomerBookingsLoading] = useState(false);
+  const [customerBookingsError, setCustomerBookingsError] = useState<string | null>(null);
+  const [bookingError, setBookingError] = useState<string | null>(null);
+  const [bookingSubmitting, setBookingSubmitting] = useState(false);
+  const [bookingConfirmation, setBookingConfirmation] = useState<any | null>(null);
 
   // Modals active state
   const [isBudgetOpen, setIsBudgetOpen] = useState(false);
@@ -132,40 +145,127 @@ export default function VendooraLandingPage({
   const [selectedInquiryVendor, setSelectedInquiryVendor] = useState<any | null>(null);
   const [selectedInquiryPackage, setSelectedInquiryPackage] = useState<EventPackage | null>(null);
   const [inquiryEventName, setInquiryEventName] = useState('');
-  const [inquiryDate, setInquiryDate] = useState('2026-07-20');
+  const [inquiryDate, setInquiryDate] = useState(new Date().toISOString().slice(0, 10));
   const [inquiryTime, setInquiryTime] = useState('18:00');
+  const [inquiryEndTime, setInquiryEndTime] = useState('20:00');
   const [inquiryGuests, setInquiryGuests] = useState('150');
+  const [inquiryVenue, setInquiryVenue] = useState('');
   const [inquiryMessage, setInquiryMessage] = useState('');
+  const [selectedServiceId, setSelectedServiceId] = useState('');
+  const [packageVendorId, setPackageVendorId] = useState('');
+
+  useEffect(() => {
+    const loadCatalog = async () => {
+      setCatalogLoading(true);
+      setCatalogError(null);
+      try {
+        const [vendorsResponse, servicesResponse] = await Promise.all([
+          fetch('/api/vendors?limit=100'),
+          fetch('/api/services?limit=100'),
+        ]);
+        if (!vendorsResponse.ok || !servicesResponse.ok) throw new Error('Unable to load vendors and services');
+        const [vendorsPayload, servicesPayload] = await Promise.all([vendorsResponse.json(), servicesResponse.json()]);
+        setVendors(Array.isArray(vendorsPayload?.vendors) ? vendorsPayload.vendors : []);
+        setServices(Array.isArray(servicesPayload?.services) ? servicesPayload.services : []);
+      } catch (error) {
+        setCatalogError(error instanceof Error ? error.message : 'Unable to load vendors and services');
+      } finally {
+        setCatalogLoading(false);
+      }
+    };
+    loadCatalog();
+  }, []);
+
+  const loadCustomerBookings = async () => {
+    const token = localStorage.getItem('vendoora_token');
+    if (!token) {
+      setCustomerBookings([]);
+      return;
+    }
+    setCustomerBookingsLoading(true);
+    setCustomerBookingsError(null);
+    try {
+      const response = await fetch('/api/bookings/client', { headers: { Authorization: `Bearer ${token}` } });
+      const payload = await response.json().catch(() => ({}));
+      if (response.status === 401 || response.status === 403) throw new Error('Please sign in as a customer to view bookings');
+      if (!response.ok) throw new Error(payload?.error || 'Unable to load your bookings');
+      setCustomerBookings(Array.isArray(payload?.bookings) ? payload.bookings : []);
+    } catch (error) {
+      setCustomerBookingsError(error instanceof Error ? error.message : 'Unable to load your bookings');
+    } finally {
+      setCustomerBookingsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCustomerBookings();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedInquiryVendor?.id) return;
+    let cancelled = false;
+    const loadAvailability = async () => {
+      setAvailabilityLoading(true);
+      setAvailabilityError(null);
+      try {
+        const response = await fetch(`/api/vendors/${selectedInquiryVendor.id}/availability`);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload?.error || 'Unable to load vendor availability');
+        if (cancelled) return;
+        const slots = Array.isArray(payload?.availability) ? payload.availability : [];
+        setAvailability(slots);
+        setAvailabilityAccepting(payload?.acceptingBookings !== false);
+        const dateSlots = slots.filter((slot: any) => String(slot.date).slice(0, 10) === inquiryDate);
+        if (dateSlots[0]) {
+          setInquiryTime(dateSlots[0].startTime);
+          setInquiryEndTime(dateSlots[0].endTime);
+        }
+      } catch (error) {
+        if (!cancelled) setAvailabilityError(error instanceof Error ? error.message : 'Unable to load vendor availability');
+      } finally {
+        if (!cancelled) setAvailabilityLoading(false);
+      }
+    };
+    loadAvailability();
+    return () => { cancelled = true; };
+  }, [selectedInquiryVendor?.id]);
+
+  useEffect(() => {
+    if (!selectedInquiryVendor?.id || availabilityLoading) return;
+    const dateSlots = availability.filter((slot: any) => String(slot.date).slice(0, 10) === inquiryDate);
+    if (dateSlots[0]) {
+      setInquiryTime(dateSlots[0].startTime);
+      setInquiryEndTime(dateSlots[0].endTime);
+    }
+  }, [inquiryDate, availability, availabilityLoading, selectedInquiryVendor?.id]);
 
   const handleBookEstimate = (estimateRange: string) => {
     setIsBudgetOpen(false);
-
-    const newBooking = {
-      id: `e-${Date.now()}`,
-      eventName: `${estimateRange} Budget Plan`,
-      clientName: 'Rahul Mehta (Lead)',
-      date: '2026-08-15',
-      time: '19:00',
-      location: `Celebration Hall, ${selectedLocation}`,
-      status: 'pending' as const,
-    };
-
-    onAddBooking(newBooking);
-
-    onAddNotification({
-      id: `n-${Date.now()}`,
-      title: 'New Celebration Budget Lead',
-      message: `A client requested supplier matchmaking for a ${estimateRange} tier budget near ${selectedLocation}.`,
-      time: 'Just now',
-      type: 'inquiry',
-      read: false,
-    });
-
-    alert(`Success! Your budget plan for ${estimateRange} has been submitted. Switch to the Vendor Command Center to review this lead!`);
+    if (vendorCards[0]) {
+      setSelectedInquiryVendor(vendorCards[0]);
+      setInquiryEventName(`${estimateRange} Budget Plan`);
+      setInquiryVenue('');
+    } else {
+      setBookingError('No vendors are currently available for booking.');
+    }
   };
 
+  const vendorCards = vendors.map((vendor) => {
+    const vendorServices = services.filter((service) => service.vendorId === vendor.id);
+    return {
+      ...vendor,
+      name: vendor.businessName,
+      startingPrice: vendorServices[0]?.startingPrice || 0,
+      image: vendor.logo || vendor.coverImage || '',
+      isVerified: vendor.verificationStatus === 'VERIFIED',
+      reviewsCount: vendor.totalReviews || 0,
+      location: `${vendor.city}, ${vendor.state}`,
+      distance: vendor.distance || 0,
+    };
+  });
+
   // Dynamic filter for recommended vendors list based on selected category and query
-  const filteredVendors = VENDORS.filter((vendor) => {
+  const filteredVendors = vendorCards.filter((vendor) => {
     const matchesCategory = selectedCategory
       ? vendor.category.toLowerCase() === selectedCategory.toLowerCase()
       : true;
@@ -178,7 +278,7 @@ export default function VendooraLandingPage({
   });
 
   // Spotlight curated featured vendors (verified and rating >= 4.7)
-  const featuredVendors = VENDORS.filter((v) => v.isVerified && v.rating >= 4.7);
+  const featuredVendors = vendorCards.filter((v) => v.isVerified && v.rating >= 4.7);
 
   // Bottom Navigation configuration with Lucide Icons
   const navigationTabs = [
@@ -187,7 +287,90 @@ export default function VendooraLandingPage({
     { id: 'categories', label: 'Categories', icon: GridIcon },
     { id: 'market', label: 'Market', icon: BagIcon },
     { id: 'packages', label: 'Packages', icon: GiftIcon },
+    { id: 'bookings', label: 'Bookings', icon: ClipboardList },
   ];
+
+  const selectedVendorServices = services.filter((service) => service.vendorId === selectedInquiryVendor?.id);
+  const selectedDateSlots = availability.filter((slot) => String(slot.date).slice(0, 10) === inquiryDate);
+
+  const openVendorInquiry = (vendor: any) => {
+    const catalogVendor = vendorCards.find((item) => item.id === vendor.id) || vendor;
+    setSelectedInquiryVendor(catalogVendor);
+    setSelectedServiceId(services.find((service) => service.vendorId === catalogVendor.id)?.id || '');
+    setBookingError(null);
+    setAvailabilityError(null);
+  };
+
+  const openPackageBooking = (pkg: EventPackage) => {
+    setSelectedInquiryPackage(pkg);
+    setPackageVendorId(vendorCards[0]?.id || '');
+    setBookingError(null);
+  };
+
+  const openServiceBooking = (service: any) => {
+    const vendor = vendorCards.find((item) => item.id === service.vendorId);
+    if (!vendor) {
+      setBookingError('This service vendor is no longer available.');
+      return;
+    }
+    openVendorInquiry(vendor);
+    setSelectedServiceId(service.id);
+  };
+
+  const submitBooking = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedInquiryVendor) return;
+    const token = localStorage.getItem('vendoora_token');
+    if (!token) {
+      setBookingError('Please sign in as a customer before submitting a booking.');
+      return;
+    }
+    setBookingSubmitting(true);
+    setBookingError(null);
+    try {
+      const selectedService = selectedVendorServices.find((service) => service.id === selectedServiceId);
+      const response = await fetch('/api/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          vendorId: selectedInquiryVendor.id,
+          serviceId: selectedServiceId || undefined,
+          eventName: inquiryEventName || `${selectedInquiryVendor.name} - Custom celebration`,
+          eventDate: inquiryDate,
+          startTime: inquiryTime,
+          endTime: inquiryEndTime,
+          venue: inquiryVenue,
+          guestCount: Number(inquiryGuests),
+          totalPrice: selectedService?.startingPrice || selectedInquiryVendor.startingPrice || 0,
+          specialRequest: inquiryMessage || undefined,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (response.status === 401 || response.status === 403) throw new Error('Please sign in as a customer before submitting a booking.');
+      if (response.status === 409) throw new Error(payload?.error || 'That time is no longer available. Please choose another slot.');
+      if (!response.ok) throw new Error(payload?.error || 'Unable to submit booking');
+
+      setBookingConfirmation(payload.booking);
+      await loadCustomerBookings();
+      onAddNotification({
+        id: `n-${Date.now()}`,
+        title: 'Booking Request Submitted',
+        message: `Your request for "${inquiryEventName || selectedInquiryVendor.name}" was sent to the vendor.`,
+        time: 'Just now',
+        type: 'inquiry',
+        read: false,
+      });
+      setSelectedInquiryVendor(null);
+      setInquiryEventName('');
+      setInquiryMessage('');
+      setInquiryVenue('');
+      setActiveTab('bookings');
+    } catch (error) {
+      setBookingError(error instanceof Error ? error.message : 'Unable to submit booking');
+    } finally {
+      setBookingSubmitting(false);
+    }
+  };
 
   // Smooth scroll handler for Bottom Navigation mobile interactions
   const handleTabChange = (tabId: string) => {
@@ -198,6 +381,7 @@ export default function VendooraLandingPage({
       categories: 'categories-section-root',
       market: 'marketplace-section-root',
       packages: 'packages-section-root',
+      bookings: 'customer-bookings-root',
     };
     const element = document.getElementById(elementIdMap[tabId]);
     if (element) {
@@ -333,13 +517,17 @@ export default function VendooraLandingPage({
             )}
           </div>
 
-          {filteredVendors.length > 0 ? (
+          {catalogLoading ? (
+            <div className="flex items-center justify-center gap-2 py-12 text-sm text-zinc-500"><Loader2 className="w-5 h-5 animate-spin" />Loading verified vendors...</div>
+          ) : catalogError ? (
+            <div className="flex items-center justify-center gap-2 py-12 text-sm text-red-500"><AlertCircle className="w-5 h-5" />{catalogError}</div>
+          ) : filteredVendors.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
               {filteredVendors.map((vendor) => (
                 <DSVendorCard
                   key={vendor.id}
                   vendor={vendor}
-                  onClick={(v) => setSelectedInquiryVendor(v)}
+                  onClick={openVendorInquiry}
                 />
               ))}
             </div>
@@ -382,7 +570,7 @@ export default function VendooraLandingPage({
         {/* 6.5. Marketplace Discovery with Filters (Strict order item 6.5) */}
         <section id="marketplace-discovery-root" className="w-full bg-gradient-to-b from-zinc-900 to-zinc-800 py-12">
           <div className="w-full max-w-7xl mx-auto px-4 md:px-6">
-            <MarketplaceDiscovery />
+            <MarketplaceDiscovery onSelectVendor={openVendorInquiry} onSelectService={openServiceBooking} />
           </div>
         </section>
 
@@ -452,7 +640,7 @@ export default function VendooraLandingPage({
                       <Button
                         variant="primary"
                         size="sm"
-                        onClick={() => setSelectedInquiryVendor(vendor)}
+                        onClick={() => openVendorInquiry(vendor)}
                       >
                         Inquire
                       </Button>
@@ -537,7 +725,7 @@ export default function VendooraLandingPage({
                   <Button
                     variant="primary"
                     size="sm"
-                    onClick={() => setSelectedInquiryPackage(pkg)}
+                    onClick={() => openPackageBooking(pkg)}
                   >
                     Configure
                   </Button>
@@ -545,6 +733,50 @@ export default function VendooraLandingPage({
               </Card>
             ))}
           </div>
+        </section>
+
+        <section id="customer-bookings-root" className="w-full max-w-7xl mx-auto px-4 md:px-6 py-4">
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h3 className="font-heading font-bold text-lg md:text-xl text-zinc-900">Your Bookings</h3>
+              <p className="text-zinc-500 text-xs mt-0.5">Track booking requests and confirmed event schedules.</p>
+            </div>
+            <Button variant="secondary" size="sm" onClick={loadCustomerBookings}>Refresh</Button>
+          </div>
+          {bookingConfirmation && (
+            <Card variant="surface" className="mb-6 border-emerald-200 bg-emerald-50 p-5">
+              <div className="flex items-start gap-3">
+                <ClipboardList className="w-5 h-5 text-emerald-600 mt-0.5" />
+                <div>
+                  <h4 className="font-heading font-bold text-emerald-900">Booking request submitted</h4>
+                  <p className="text-xs text-emerald-700 mt-1">{bookingConfirmation.eventName} · {String(bookingConfirmation.eventDate).slice(0, 10)} at {bookingConfirmation.startTime}</p>
+                  <p className="text-[10px] text-emerald-600 mt-1 font-mono">Reference: {bookingConfirmation.id}</p>
+                </div>
+              </div>
+            </Card>
+          )}
+          {customerBookingsLoading ? (
+            <div className="flex items-center justify-center gap-2 py-10 text-sm text-zinc-500"><Loader2 className="w-5 h-5 animate-spin" />Loading your bookings...</div>
+          ) : customerBookingsError ? (
+            <div className="flex items-center justify-center gap-2 py-10 text-sm text-amber-600"><AlertCircle className="w-5 h-5" />{customerBookingsError}</div>
+          ) : customerBookings.length === 0 ? (
+            <div className="text-center py-10 border border-dashed border-zinc-200 rounded-[24px] bg-white/40 text-sm text-zinc-500">No customer bookings yet.</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {customerBookings.map((booking) => (
+                <Card key={booking.id} variant="surface" className="p-5 border-zinc-200">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h4 className="font-heading font-bold text-zinc-900">{booking.eventName}</h4>
+                      <p className="text-xs text-zinc-500 mt-1">{booking.vendor?.businessName || 'Vendor'} · {String(booking.eventDate).slice(0, 10)}</p>
+                      <p className="text-xs text-zinc-500">{booking.startTime}{booking.endTime ? `–${booking.endTime}` : ''} · {booking.venue}</p>
+                    </div>
+                    <Badge variant={booking.status === 'DECLINED' ? 'danger' : booking.status === 'COMPLETED' ? 'success' : 'primary'}>{booking.status}</Badge>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
         </section>
 
       </main>
@@ -611,37 +843,7 @@ export default function VendooraLandingPage({
           subtitle={`Fill out your celebration details to connect and request quotes for ${selectedInquiryVendor.category}`}
           size="md"
         >
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const newBooking = {
-                id: `e-${Date.now()}`,
-                eventName: inquiryEventName || `${selectedInquiryVendor.name} - Custom celebration`,
-                clientName: 'Rahul Mehta (Client)',
-                date: inquiryDate,
-                time: inquiryTime,
-                location: `${selectedLocation}`,
-                status: 'pending' as const,
-              };
-
-              onAddBooking(newBooking);
-
-              onAddNotification({
-                id: `n-${Date.now()}`,
-                title: 'New Client Inquiry',
-                message: `Rahul Mehta requested a quote for "${selectedInquiryVendor.name}" on ${inquiryDate} for "${inquiryEventName || 'Exclusive Celebration'}".`,
-                time: 'Just now',
-                type: 'inquiry',
-                read: false,
-              });
-
-              alert(`Success! Your inquiry has been sent to "${selectedInquiryVendor.name}". Go to the Vendor Command Center to manage and approve this booking!`);
-              setSelectedInquiryVendor(null);
-              setInquiryEventName('');
-              setInquiryMessage('');
-            }}
-            className="space-y-4"
-          >
+          <form onSubmit={submitBooking} className="space-y-4">
             <div>
               <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block mb-1">Event Name / Occasion</label>
               <Input
@@ -664,13 +866,42 @@ export default function VendooraLandingPage({
               </div>
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block mb-1">Setup Time</label>
-                <Input
-                  type="time"
+                <select
                   required
                   value={inquiryTime}
                   onChange={(e) => setInquiryTime(e.target.value)}
-                />
+                  disabled={availabilityLoading || !availabilityAccepting || selectedDateSlots.length === 0}
+                  className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm disabled:opacity-50"
+                >
+                  {selectedDateSlots.length === 0 && <option value="">No slots</option>}
+                  {selectedDateSlots.map((slot) => <option key={`${slot.startTime}-${slot.endTime}`} value={slot.startTime}>{slot.startTime}–{slot.endTime}</option>)}
+                </select>
               </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block mb-1">End Time</label>
+                <Input type="time" required readOnly value={inquiryEndTime} />
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block mb-1">Service</label>
+              <select
+                required={selectedVendorServices.length > 0}
+                value={selectedServiceId}
+                onChange={(e) => setSelectedServiceId(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm"
+              >
+                {selectedVendorServices.length === 0 && <option value="">Vendor-wide inquiry</option>}
+                {selectedVendorServices.map((service) => (
+                  <option key={service.id} value={service.id}>{service.title} · ₹{service.startingPrice.toLocaleString('en-IN')}</option>
+                ))}
+              </select>
+            </div>
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/50 p-3 space-y-2">
+              {availabilityLoading && <p className="text-xs text-zinc-500 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />Loading availability...</p>}
+              {availabilityError && <p className="text-xs text-red-500 flex items-center gap-2"><AlertCircle className="w-4 h-4" />{availabilityError}</p>}
+              {!availabilityLoading && !availabilityError && !availabilityAccepting && <p className="text-xs text-amber-600">This vendor is paused and cannot accept bookings.</p>}
+              {!availabilityLoading && !availabilityError && availabilityAccepting && selectedDateSlots.length === 0 && <p className="text-xs text-zinc-500">No available time slots for this date.</p>}
+              {!availabilityLoading && !availabilityError && availabilityAccepting && selectedDateSlots.length > 0 && <p className="text-xs text-emerald-600">Available: {selectedDateSlots.map((slot) => `${slot.startTime}–${slot.endTime}`).join(', ')}</p>}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -686,8 +917,10 @@ export default function VendooraLandingPage({
                 <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block mb-1">Location</label>
                 <Input
                   type="text"
-                  readOnly
-                  value={selectedLocation}
+                  required
+                  placeholder="Venue or address"
+                  value={inquiryVenue}
+                  onChange={(e) => setInquiryVenue(e.target.value)}
                 />
               </div>
             </div>
@@ -701,8 +934,9 @@ export default function VendooraLandingPage({
                 onChange={(e) => setInquiryMessage(e.target.value)}
               />
             </div>
+            {bookingError && <p className="text-xs text-red-500 flex items-center gap-2"><AlertCircle className="w-4 h-4" />{bookingError}</p>}
             <Button type="submit" variant="primary" className="w-full py-3 font-bold uppercase tracking-wide">
-              Submit Premium Inquiry
+              {bookingSubmitting ? 'Submitting...' : 'Submit Booking Request'}
             </Button>
           </form>
         </Modal>
@@ -720,29 +954,15 @@ export default function VendooraLandingPage({
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              const newBooking = {
-                id: `e-${Date.now()}`,
-                eventName: `${selectedInquiryPackage.name} Booking`,
-                clientName: 'Sneha Patel (Client)',
-                date: inquiryDate,
-                time: inquiryTime,
-                location: `Royal Banquets, ${selectedLocation}`,
-                status: 'pending' as const,
-              };
-
-              onAddBooking(newBooking);
-
-              onAddNotification({
-                id: `n-${Date.now()}`,
-                title: 'New Package Booking',
-                message: `Sneha Patel requested a booking for the package "${selectedInquiryPackage.name}" on ${inquiryDate} in ${selectedLocation}. (Package Rate: ₹${selectedInquiryPackage.price.toLocaleString('en-IN')})`,
-                time: 'Just now',
-                type: 'inquiry',
-                read: false,
-              });
-
-              alert(`Success! Your custom package order for "${selectedInquiryPackage.name}" has been placed. Go to the Vendor Command Center's Bookings tab to view and accept it!`);
+              const vendor = vendorCards.find((item) => item.id === packageVendorId);
+              if (!vendor) {
+                setBookingError('Select a vendor before continuing.');
+                return;
+              }
               setSelectedInquiryPackage(null);
+              setInquiryEventName(`${selectedInquiryPackage.name} Booking`);
+              setInquiryVenue(`Royal Banquets, ${selectedLocation}`);
+              openVendorInquiry(vendor);
             }}
             className="space-y-4"
           >
@@ -753,6 +973,14 @@ export default function VendooraLandingPage({
               <div className="text-sm font-mono font-bold text-zinc-900 dark:text-zinc-200 pt-1">
                 Total Price: ₹{selectedInquiryPackage.price.toLocaleString('en-IN')}
               </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block mb-1">Select vendor</label>
+              <select required value={packageVendorId} onChange={(e) => setPackageVendorId(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm">
+                <option value="">Choose a vendor</option>
+                {vendorCards.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}
+              </select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

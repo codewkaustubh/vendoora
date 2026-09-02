@@ -17,6 +17,8 @@ export async function create(req: any, res: Response) {
       venue,
       guestCount,
       totalPrice,
+      serviceId,
+      specialRequest,
       bookingOtp,
       otpVerified,
     } = req.body;
@@ -38,6 +40,12 @@ export async function create(req: any, res: Response) {
       return res.status(404).json({ error: 'Vendor profile not found' });
     }
 
+    const bookingServiceId = serviceId ? String(serviceId) : undefined;
+    if (bookingServiceId) {
+      const service = await prisma.service.findFirst({ where: { id: bookingServiceId, vendorId } });
+      if (!service) return res.status(400).json({ error: 'Service does not belong to the selected vendor' });
+    }
+
     const parsedBookingDate = new Date(bookingDate);
     if (Number.isNaN(parsedBookingDate.getTime())) {
       return res.status(400).json({ error: 'Invalid booking date' });
@@ -57,12 +65,14 @@ export async function create(req: any, res: Response) {
         data: {
           clientId: req.user.id,
           vendorId,
+          serviceId: bookingServiceId,
           eventName,
           eventDate: parsedBookingDate,
           startTime: String(bookingStartTime),
           endTime: endTime ? String(endTime) : undefined,
           venue: String(bookingVenue),
           guestCount: guestCount !== undefined ? Number(guestCount) : undefined,
+          specialRequest: specialRequest ? String(specialRequest) : undefined,
           totalPrice: Number(totalPrice ?? 0),
           bookingOtp: bookingOtp ? String(bookingOtp) : undefined,
           otpVerified: otpVerified === true,
