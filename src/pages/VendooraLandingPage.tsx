@@ -135,6 +135,8 @@ export default function VendooraLandingPage({
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [bookingSubmitting, setBookingSubmitting] = useState(false);
   const [bookingConfirmation, setBookingConfirmation] = useState<any | null>(null);
+  const [paymentActionId, setPaymentActionId] = useState<string | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   // Modals active state
   const [isBudgetOpen, setIsBudgetOpen] = useState(false);
@@ -369,6 +371,101 @@ export default function VendooraLandingPage({
       setBookingError(error instanceof Error ? error.message : 'Unable to submit booking');
     } finally {
       setBookingSubmitting(false);
+    }
+  };
+
+  const loadRazorpayCheckout = () => new Promise<boolean>((resolve) => {
+    if ((window as any).Razorpay) return resolve(true);
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+
+  const handlePayBooking = async (booking: any) => {
+    const token = localStorage.getItem('vendoora_token');
+    if (!token) {
+      setPaymentError('Please sign in as a customer before paying.');
+      return;
+    }
+    setPaymentActionId(booking.id);
+    setPaymentError(null);
+    try {
+      const response = await fetch('/api/payments/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ bookingId: booking.id, currency: 'INR' }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (response.status === 401 || response.status === 403) throw new Error('Please sign in as a customer before paying.');
+      if (!response.ok) throw new Error(payload?.error || 'Unable to start payment');
+      if (!(await loadRazorpayCheckout())) throw new Error('Unable to load Razorpay checkout');
+
+      await new Promise<void>((resolve, reject) => {
+        const checkout = new (window as any).Razorpay({
+          key: payload.keyId,
+          amount: payload.order.amount,
+          currency: payload.order.currency,
+          name: 'Vendoora',
+          description: booking.eventName,
+          order_id: payload.order.id,
+          handler: async (result: any) => {
+            try {
+              const verifyResponse = await fetch('/api/payments/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ bookingId: booking.id, ...result }),
+              });
+              const verifyPayload = await verifyResponse.json().catch(() => ({}));
+              if (!verifyResponse.ok) throw new Error(verifyPayload?.error || 'Payment verification failed');
+              await loadCustomerBookings();
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
+          },
+          modal: { ondismiss: () => reject(new Error('Payment was cancelled')) },
+        });
+        checkout.on('payment.failed', async (failure: any) => {
+          await fetch('/api/payments/failed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ bookingId: booking.id, reason: failure?.error?.description }),
+          });
+          reject(new Error(failure?.error?.description || 'Payment failed'));
+        });
+        checkout.open();
+      });
+    } catch (error) {
+      setPaymentError(error instanceof Error ? error.message : 'Payment failed');
+      await loadCustomerBookings();
+    } finally {
+      setPaymentActionId(null);
+    }
+  };
+
+  const handleCancelBooking = async (bookingId: string) => {
+    const token = localStorage.getItem('vendoora_token');
+    if (!token) {
+      setPaymentError('Please sign in as a customer before cancelling.');
+      return;
+    }
+    setPaymentActionId(bookingId);
+    setPaymentError(null);
+    try {
+      const response = await fetch('/api/bookings/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ bookingId }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || 'Unable to cancel booking');
+      await loadCustomerBookings();
+    } catch (error) {
+      setPaymentError(error instanceof Error ? error.message : 'Unable to cancel booking');
+    } finally {
+      setPaymentActionId(null);
     }
   };
 
@@ -755,6 +852,7 @@ export default function VendooraLandingPage({
               </div>
             </Card>
           )}
+          {paymentError && <p className="mb-4 flex items-center gap-2 text-xs text-red-600"><AlertCircle className="w-4 h-4" />{paymentError}</p>}
           {customerBookingsLoading ? (
             <div className="flex items-center justify-center gap-2 py-10 text-sm text-zinc-500"><Loader2 className="w-5 h-5 animate-spin" />Loading your bookings...</div>
           ) : customerBookingsError ? (
@@ -772,6 +870,19 @@ export default function VendooraLandingPage({
                       <p className="text-xs text-zinc-500">{booking.startTime}{booking.endTime ? `–${booking.endTime}` : ''} · {booking.venue}</p>
                     </div>
                     <Badge variant={booking.status === 'DECLINED' ? 'danger' : booking.status === 'COMPLETED' ? 'success' : 'primary'}>{booking.status}</Badge>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between border-t border-zinc-100 pt-3">
+                    <span className="text-xs text-zinc-500">Payment: {booking.paymentStatus || booking.payment?.status || 'PENDING'}{booking.totalPrice ? ` · ₹${Number(booking.totalPrice).toLocaleString('en-IN')}` : ''}</span>
+                    <div className="flex gap-2">
+                      {booking.paymentStatus !== 'PAID' && booking.paymentStatus !== 'REFUNDED' && booking.status !== 'DECLINED' && (
+                        <Button size="sm" onClick={() => handlePayBooking(booking)} disabled={paymentActionId === booking.id}>
+                          {paymentActionId === booking.id ? 'Processing...' : booking.paymentStatus === 'FAILED' ? 'Retry payment' : 'Pay now'}
+                        </Button>
+                      )}
+                      {(booking.status === 'PENDING' || booking.status === 'SCHEDULED') && (
+                        <Button size="sm" variant="secondary" onClick={() => handleCancelBooking(booking.id)} disabled={paymentActionId === booking.id}>Cancel</Button>
+                      )}
+                    </div>
                   </div>
                 </Card>
               ))}

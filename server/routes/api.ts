@@ -10,6 +10,7 @@ import * as services from '../controllers/services';
 import * as media from '../controllers/media';
 import * as discovery from '../controllers/discovery';
 import * as availability from '../controllers/availability';
+import * as payments from '../controllers/payments';
 import { authenticateJWT, requireRole } from '../middlewares/auth';
 import { upload } from '../config/cloudinary';
 
@@ -48,6 +49,14 @@ router.post('/bookings', authenticateJWT, bookings.create);
 router.get('/bookings/vendor', authenticateJWT, requireRole(['VENDOR']), bookings.getVendorBookings);
 router.get('/bookings/client', authenticateJWT, requireRole(['CLIENT', 'ADMIN']), bookings.getClientBookings);
 router.put('/bookings/:id/status', authenticateJWT, requireRole(['VENDOR']), bookings.updateStatus);
+
+// --- PAYMENTS & CUSTOMER CANCELLATION ---
+router.post('/payments/orders', authenticateJWT, requireRole(['CLIENT', 'ADMIN']), payments.createOrder);
+router.post('/payments/verify', authenticateJWT, requireRole(['CLIENT', 'ADMIN']), payments.verifyPayment);
+router.post('/payments/failed', authenticateJWT, requireRole(['CLIENT', 'ADMIN']), payments.markFailed);
+router.get('/payments/bookings/:bookingId', authenticateJWT, requireRole(['CLIENT', 'ADMIN']), payments.getBookingPayment);
+router.post('/bookings/cancel', authenticateJWT, requireRole(['CLIENT', 'ADMIN']), payments.refundPayment);
+router.get('/payments/vendor/summary', authenticateJWT, requireRole(['VENDOR']), payments.vendorSummary);
 
 // --- SERVICE DISCOVERY ---
 router.post('/services', authenticateJWT, requireRole(['VENDOR']), services.create);

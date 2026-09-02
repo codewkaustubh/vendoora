@@ -42,6 +42,23 @@ The current API layer is mounted under /api and is implemented using Express rou
   - Returns bookings for the authenticated client
 - PUT /api/bookings/:id/status
   - Updates booking status
+- POST /api/bookings/cancel
+  - Authenticated customer cancellation; refunds eligible paid future bookings
+
+### Payments (Razorpay)
+
+- POST /api/payments/orders
+  - Authenticated client creates or reuses an INR Razorpay order for an owned booking
+  - Server derives the amount from Booking.totalPrice and returns 409 if already paid
+- POST /api/payments/verify
+  - Authenticated client submits Razorpay order/payment/signature values
+  - Server verifies the HMAC signature, provider payment, amount, currency, and updates Payment and Booking.paymentStatus to PAID or FAILED
+- POST /api/payments/failed
+  - Records a failed or cancelled checkout for an owned unpaid booking
+- GET /api/payments/bookings/:bookingId
+  - Returns payment status for an owned booking
+- GET /api/payments/vendor/summary
+  - Returns paid booking count, paid/refunded amounts, and pending payment count for the authenticated vendor
 
 ### Marketplace
 
@@ -85,7 +102,6 @@ The current API surface is still early-stage. The following areas are not yet fu
 - Wishlist create/read/delete endpoints
 - Vendor analytics summaries and reporting endpoints
 - File upload endpoints for profile images, cover images, and product images
-- Payment and checkout flow APIs
 - Search ranking and recommendation APIs
 
 ## Suggested REST Endpoints (Documentation Only)
@@ -102,8 +118,6 @@ The following endpoints would fit the existing domain model and UI direction:
 - GET /api/analytics/vendor/:vendorId
 - POST /api/auth/google
 - POST /api/uploads/image
-- POST /api/payments/intent
-- POST /api/payments/confirm
 
 ## Notes
 

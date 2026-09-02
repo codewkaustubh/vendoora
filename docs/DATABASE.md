@@ -105,6 +105,16 @@ Key fields:
 Relationships:
 - One User
 
+### Payment
+
+Stores one Razorpay payment/order record for each booking.
+
+Key fields:
+- bookingId, provider, orderId, paymentId, signature, amountPaise, currency, status, failureReason, refundId, paidAt, refundedAt
+
+Relationships:
+- One Booking (1:1)
+
 ### VibeReel
 
 Short-form vendor content for the reels experience.
@@ -144,6 +154,7 @@ Relationships:
 - PriceType: FIXED, HOURLY, DAILY
 - ProductCondition: MINT, EXCELLENT, GOOD, FAIR
 - PaymentStatus: PENDING, PAID, FAILED, REFUNDED
+- PaymentRecordStatus: PENDING, PAID, FAILED, REFUNDED
 
 ## Indexes
 
@@ -152,6 +163,7 @@ The schema defines indexes for:
 - Vendor city, state, category, rating
 - Service vendorId, categoryId, startingPrice
 - Booking clientId, vendorId, serviceId, status
+- Payment bookingId, orderId, paymentId, status
 - Review vendorId
 
 ## Suggested Improvements (No Schema Changes Yet)

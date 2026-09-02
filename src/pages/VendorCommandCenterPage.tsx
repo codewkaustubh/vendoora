@@ -151,6 +151,7 @@ export default function VendorCommandCenterPage({
   const [serviceCoverUploadPreview, setServiceCoverUploadPreview] = useState<string | null>(null);
   const [serviceCoverUploadLoading, setServiceCoverUploadLoading] = useState(false);
   const [serviceCoverUploadError, setServiceCoverUploadError] = useState<string | null>(null);
+  const [paymentSummary, setPaymentSummary] = useState<any>(null);
 
   const profileUploadTargetId = currentUser?.id || null;
   const vendorUploadTargetId = currentVendor?.id || null;
@@ -194,6 +195,10 @@ export default function VendorCommandCenterPage({
           setAvailability(Array.isArray(availabilityPayload?.availability) ? availabilityPayload.availability : []);
           setBlackouts(Array.isArray(availabilityPayload?.blackouts) ? availabilityPayload.blackouts : []);
           setAcceptingBookings(availabilityPayload?.acceptingBookings !== false);
+          const paymentSummaryResponse = await fetch('/api/payments/vendor/summary', {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (paymentSummaryResponse.ok) setPaymentSummary(await paymentSummaryResponse.json());
         }
 
         const servicesResponse = await fetch('/api/services');
@@ -1026,10 +1031,21 @@ export default function VendorCommandCenterPage({
                 </div>
 
                 <VendorAnalyticsRow
-                  monthlyEarnings={145000}
+                  monthlyEarnings={paymentSummary ? paymentSummary.paidAmountPaise / 100 : 0}
                   activeInquiries={pendingBookingsCount}
                   rating={4.85}
                 />
+
+                {paymentSummary && (
+                  <Card variant="glass" className="border-zinc-800 bg-zinc-950/40 rounded-[28px] p-5">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                      <div><span className="block text-[9px] uppercase text-zinc-500 font-bold">Paid bookings</span><span className="text-lg font-mono text-emerald-400">{paymentSummary.paidBookings}</span></div>
+                      <div><span className="block text-[9px] uppercase text-zinc-500 font-bold">Paid earnings</span><span className="text-lg font-mono text-white">₹{(paymentSummary.paidAmountPaise / 100).toLocaleString('en-IN')}</span></div>
+                      <div><span className="block text-[9px] uppercase text-zinc-500 font-bold">Refunded</span><span className="text-lg font-mono text-amber-400">₹{(paymentSummary.refundedAmountPaise / 100).toLocaleString('en-IN')}</span></div>
+                      <div><span className="block text-[9px] uppercase text-zinc-500 font-bold">Pending payments</span><span className="text-lg font-mono text-indigo-400">{paymentSummary.pendingPayments}</span></div>
+                    </div>
+                  </Card>
+                )}
 
                 <Card variant="glass" className="border-zinc-800 bg-zinc-950/40 backdrop-blur-md rounded-[32px] p-6 md:p-8 space-y-6">
                   <div className="flex justify-between items-center">

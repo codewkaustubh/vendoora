@@ -138,6 +138,8 @@ export async function getClientBookings(req: any, res: Response) {
         vendor: {
           select: { businessName: true, ownerName: true, category: true, logo: true, coverImage: true },
         },
+        payment: true,
+        service: { select: { title: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
