@@ -9,6 +9,7 @@ import * as reels from '../controllers/reels';
 import * as services from '../controllers/services';
 import * as media from '../controllers/media';
 import * as discovery from '../controllers/discovery';
+import * as availability from '../controllers/availability';
 import { authenticateJWT, requireRole } from '../middlewares/auth';
 import { upload } from '../config/cloudinary';
 
@@ -24,7 +25,18 @@ router.post('/media/upload', authenticateJWT, upload.single('file'), media.uploa
 // --- VENDOR ENDPOINTS ---
 router.get('/vendors', vendors.getAll);
 router.get('/vendors/:id', vendors.getById);
+router.get('/vendors/:vendorId/availability', availability.getForVendor);
 router.put('/vendors/profile', authenticateJWT, requireRole(['VENDOR']), vendors.updateProfile);
+
+// --- VENDOR AVAILABILITY & BLACKOUTS ---
+router.get('/availability', authenticateJWT, requireRole(['VENDOR']), availability.getMine);
+router.post('/availability', authenticateJWT, requireRole(['VENDOR']), availability.createAvailability);
+router.put('/availability/:id', authenticateJWT, requireRole(['VENDOR']), availability.updateAvailability);
+router.delete('/availability/:id', authenticateJWT, requireRole(['VENDOR']), availability.deleteAvailability);
+router.get('/blackouts', authenticateJWT, requireRole(['VENDOR']), availability.getBlackouts);
+router.post('/blackouts', authenticateJWT, requireRole(['VENDOR']), availability.createBlackout);
+router.put('/blackouts/:id', authenticateJWT, requireRole(['VENDOR']), availability.updateBlackout);
+router.delete('/blackouts/:id', authenticateJWT, requireRole(['VENDOR']), availability.deleteBlackout);
 
 // --- INVENTORY MANAGEMENT ENDPOINTS ---
 router.post('/inventory', authenticateJWT, requireRole(['VENDOR']), inventory.add);

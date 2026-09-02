@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   LayoutDashboard,
   CalendarClock,
+  CalendarDays,
   Boxes,
   Coins,
   Recycle,
@@ -28,6 +29,7 @@ import {
   Check,
   AlertCircle,
   Filter,
+  Pencil,
 } from 'lucide-react';
 import HeaderBar from '../components/layout/HeaderBar';
 import { Button, Input, Badge, Card, Toggle } from '../components/design-system';
@@ -75,8 +77,18 @@ export default function VendorCommandCenterPage({
   onMarkAllNotificationsRead,
 }: VendorCommandCenterPageProps) {
   // Navigation & Control States
-  const [activeTab, setActiveTab] = useState<'analytics' | 'bookings' | 'inventory' | 'pricing' | 'seller' | 'reels' | 'notifications'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'bookings' | 'availability' | 'inventory' | 'pricing' | 'seller' | 'reels' | 'notifications'>('analytics');
   const [acceptingBookings, setAcceptingBookings] = useState(true);
+  const [availability, setAvailability] = useState<any[]>([]);
+  const [blackouts, setBlackouts] = useState<any[]>([]);
+  const [availabilityDate, setAvailabilityDate] = useState(new Date().toISOString().slice(0, 10));
+  const [availabilityStart, setAvailabilityStart] = useState('09:00');
+  const [availabilityEnd, setAvailabilityEnd] = useState('17:00');
+  const [blackoutStart, setBlackoutStart] = useState(new Date().toISOString().slice(0, 10));
+  const [blackoutEnd, setBlackoutEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [blackoutReason, setBlackoutReason] = useState('');
+  const [editingAvailabilityId, setEditingAvailabilityId] = useState<string | null>(null);
+  const [editingBlackoutId, setEditingBlackoutId] = useState<string | null>(null);
 
   // Countdown timer for next live setup dispatch
   const [secondsLeft, setSecondsLeft] = useState(1 * 3600 + 42 * 60 + 15);
@@ -173,7 +185,15 @@ export default function VendorCommandCenterPage({
           const vendorPayload = await vendorResponse.json();
           if (vendorPayload?.vendor) {
             setCurrentVendor(vendorPayload.vendor);
+            setAcceptingBookings(vendorPayload.vendor.acceptingBookings !== false);
           }
+          const availabilityResponse = await fetch('/api/availability', {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const availabilityPayload = await availabilityResponse.json();
+          setAvailability(Array.isArray(availabilityPayload?.availability) ? availabilityPayload.availability : []);
+          setBlackouts(Array.isArray(availabilityPayload?.blackouts) ? availabilityPayload.blackouts : []);
+          setAcceptingBookings(availabilityPayload?.acceptingBookings !== false);
         }
 
         const servicesResponse = await fetch('/api/services');
@@ -189,6 +209,110 @@ export default function VendorCommandCenterPage({
 
     loadAuthenticatedSession();
   }, []);
+
+  const updateAcceptingBookings = async (value: boolean) => {
+    const previousValue = acceptingBookings;
+    setAcceptingBookings(value);
+    const token = localStorage.getItem('vendoora_token');
+    if (!token) return;
+
+    try {
+      const response = await fetch('/api/vendors/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ acceptingBookings: value }),
+      });
+      if (!response.ok) throw new Error('Unable to persist booking availability');
+    } catch (error) {
+      setAcceptingBookings(previousValue);
+      window.alert(error instanceof Error ? error.message : 'Unable to persist booking availability');
+    }
+  };
+
+  const availabilityRequest = async (path: string, options: RequestInit = {}) => {
+    const token = localStorage.getItem('vendoora_token');
+    if (!token) throw new Error('Vendor authentication required');
+    const response = await fetch(path, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(options.headers || {}) },
+    });
+    const payload = response.status === 204 ? null : await response.json();
+    if (!response.ok) throw new Error(payload?.error || 'Availability request failed');
+    return payload;
+  };
+
+  const handleAddAvailability = async (event: FormEvent) => {
+    event.preventDefault();
+    try {
+      const isEditing = Boolean(editingAvailabilityId);
+      const payload = await availabilityRequest(isEditing ? `/api/availability/${editingAvailabilityId}` : '/api/availability', {
+        method: isEditing ? 'PUT' : 'POST',
+        body: JSON.stringify({ date: availabilityDate, startTime: availabilityStart, endTime: availabilityEnd }),
+      });
+      setAvailability((current) => {
+        const next = isEditing
+          ? current.map((entry) => entry.id === editingAvailabilityId ? payload.availability : entry)
+          : [...current, payload.availability];
+        return next.sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`));
+      });
+      setEditingAvailabilityId(null);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Unable to add availability');
+    }
+  };
+
+  const editAvailability = (entry: any) => {
+    setEditingAvailabilityId(entry.id);
+    setAvailabilityDate(String(entry.date).slice(0, 10));
+    setAvailabilityStart(entry.startTime);
+    setAvailabilityEnd(entry.endTime);
+  };
+
+  const handleDeleteAvailability = async (id: string) => {
+    try {
+      await availabilityRequest(`/api/availability/${id}`, { method: 'DELETE' });
+      setAvailability((current) => current.filter((entry) => entry.id !== id));
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Unable to delete availability');
+    }
+  };
+
+  const handleAddBlackout = async (event: FormEvent) => {
+    event.preventDefault();
+    try {
+      const isEditing = Boolean(editingBlackoutId);
+      const payload = await availabilityRequest(isEditing ? `/api/blackouts/${editingBlackoutId}` : '/api/blackouts', {
+        method: isEditing ? 'PUT' : 'POST',
+        body: JSON.stringify({ dateStart: blackoutStart, dateEnd: blackoutEnd, reason: blackoutReason }),
+      });
+      setBlackouts((current) => {
+        const next = isEditing
+          ? current.map((entry) => entry.id === editingBlackoutId ? payload.blackout : entry)
+          : [...current, payload.blackout];
+        return next.sort((a, b) => a.dateStart.localeCompare(b.dateStart));
+      });
+      setEditingBlackoutId(null);
+      setBlackoutReason('');
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Unable to add blackout');
+    }
+  };
+
+  const editBlackout = (entry: any) => {
+    setEditingBlackoutId(entry.id);
+    setBlackoutStart(String(entry.dateStart).slice(0, 10));
+    setBlackoutEnd(String(entry.dateEnd).slice(0, 10));
+    setBlackoutReason(entry.reason || '');
+  };
+
+  const handleDeleteBlackout = async (id: string) => {
+    try {
+      await availabilityRequest(`/api/blackouts/${id}`, { method: 'DELETE' });
+      setBlackouts((current) => current.filter((entry) => entry.id !== id));
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Unable to delete blackout');
+    }
+  };
 
   // Verification code validation is simple: any 4+ digits releases HDFC settlement
   const handleVerifyOtpSubmit = (e: FormEvent) => {
@@ -717,7 +841,7 @@ export default function VendorCommandCenterPage({
             <div className="p-4 border-b border-zinc-900 bg-zinc-900/10">
               <Toggle
                 checked={acceptingBookings}
-                onChange={setAcceptingBookings}
+                onChange={updateAcceptingBookings}
                 label="Online Bookings"
                 description={acceptingBookings ? "Active & receiving user leads" : "Paused on user marketplace"}
                 variant="success"
@@ -755,6 +879,20 @@ export default function VendorCommandCenterPage({
                 {pendingBookingsCount > 0 && (
                   <Badge variant="danger" size="sm" className="rounded-full">{pendingBookingsCount}</Badge>
                 )}
+              </button>
+
+              <button
+                onClick={() => setActiveTab('availability')}
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-xs font-bold transition-all ${
+                  activeTab === 'availability'
+                    ? 'bg-[#6366F1]/10 text-white border-l-4 border-[#6366F1]'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <CalendarDays className="w-4 h-4 shrink-0 text-indigo-400" />
+                  <span>Availability & Blackouts</span>
+                </div>
               </button>
 
               <button
@@ -951,6 +1089,74 @@ export default function VendorCommandCenterPage({
                     </div>
                   </div>
                 </Card>
+              </motion.div>
+            )}
+
+            {activeTab === 'availability' && (
+              <motion.div
+                key="availability-tab"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-8"
+              >
+                <div>
+                  <h2 className="text-xl md:text-2xl font-black font-heading text-white uppercase tracking-tight">Availability & Blackouts</h2>
+                  <p className="text-zinc-500 text-xs mt-0.5">Set the time slots customers can request and block dates for private commitments.</p>
+                </div>
+
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  <Card variant="glass" className="border-zinc-800 bg-zinc-950/40 rounded-[28px] p-6 space-y-5">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-heading font-semibold text-white text-base">Available time slots</h4>
+                      <Badge variant={acceptingBookings ? 'success' : 'danger'}>{acceptingBookings ? 'Accepting' : 'Paused'}</Badge>
+                    </div>
+                    <form onSubmit={handleAddAvailability} className="grid grid-cols-2 gap-3">
+                      <label className="col-span-2 text-[10px] uppercase font-bold text-zinc-500">Date<input type="date" value={availabilityDate} onChange={(event) => setAvailabilityDate(event.target.value)} className="mt-1 w-full rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 text-xs text-white" required /></label>
+                      <label className="text-[10px] uppercase font-bold text-zinc-500">Start<input type="time" value={availabilityStart} onChange={(event) => setAvailabilityStart(event.target.value)} className="mt-1 w-full rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 text-xs text-white" required /></label>
+                      <label className="text-[10px] uppercase font-bold text-zinc-500">End<input type="time" value={availabilityEnd} onChange={(event) => setAvailabilityEnd(event.target.value)} className="mt-1 w-full rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 text-xs text-white" required /></label>
+                      <div className="col-span-2 flex gap-2">
+                        <Button type="submit" size="sm" className="flex-1">{editingAvailabilityId ? 'Update availability' : 'Add availability'}</Button>
+                        {editingAvailabilityId && <Button type="button" size="sm" variant="secondary" onClick={() => setEditingAvailabilityId(null)}>Cancel</Button>}
+                      </div>
+                    </form>
+                    <div className="space-y-2">
+                      {availability.length === 0 ? <p className="text-xs text-zinc-500">No availability slots configured.</p> : availability.map((entry) => (
+                        <div key={entry.id} className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-xs text-zinc-300">
+                          <span>{String(entry.date).slice(0, 10)} · {entry.startTime}–{entry.endTime}</span>
+                          <div className="flex items-center gap-3">
+                            <button type="button" onClick={() => editAvailability(entry)} className="text-zinc-500 hover:text-white" aria-label="Edit availability"><Pencil className="w-4 h-4" /></button>
+                            <button type="button" onClick={() => handleDeleteAvailability(entry.id)} className="text-zinc-500 hover:text-red-400" aria-label="Delete availability"><Trash2 className="w-4 h-4" /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+
+                  <Card variant="glass" className="border-zinc-800 bg-zinc-950/40 rounded-[28px] p-6 space-y-5">
+                    <h4 className="font-heading font-semibold text-white text-base">Blackout dates</h4>
+                    <form onSubmit={handleAddBlackout} className="grid grid-cols-2 gap-3">
+                      <label className="text-[10px] uppercase font-bold text-zinc-500">From<input type="date" value={blackoutStart} onChange={(event) => setBlackoutStart(event.target.value)} className="mt-1 w-full rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 text-xs text-white" required /></label>
+                      <label className="text-[10px] uppercase font-bold text-zinc-500">To<input type="date" value={blackoutEnd} onChange={(event) => setBlackoutEnd(event.target.value)} className="mt-1 w-full rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 text-xs text-white" required /></label>
+                      <label className="col-span-2 text-[10px] uppercase font-bold text-zinc-500">Reason<input value={blackoutReason} onChange={(event) => setBlackoutReason(event.target.value)} placeholder="Private event" className="mt-1 w-full rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 text-xs text-white placeholder:text-zinc-700" /></label>
+                      <div className="col-span-2 flex gap-2">
+                        <Button type="submit" size="sm" variant="secondary" className="flex-1">{editingBlackoutId ? 'Update blackout' : 'Block dates'}</Button>
+                        {editingBlackoutId && <Button type="button" size="sm" variant="secondary" onClick={() => setEditingBlackoutId(null)}>Cancel</Button>}
+                      </div>
+                    </form>
+                    <div className="space-y-2">
+                      {blackouts.length === 0 ? <p className="text-xs text-zinc-500">No blackout dates configured.</p> : blackouts.map((entry) => (
+                        <div key={entry.id} className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-xs text-zinc-300">
+                          <span>{String(entry.dateStart).slice(0, 10)}–{String(entry.dateEnd).slice(0, 10)}{entry.reason ? ` · ${entry.reason}` : ''}</span>
+                          <div className="flex items-center gap-3">
+                            <button type="button" onClick={() => editBlackout(entry)} className="text-zinc-500 hover:text-white" aria-label="Edit blackout"><Pencil className="w-4 h-4" /></button>
+                            <button type="button" onClick={() => handleDeleteBlackout(entry.id)} className="text-zinc-500 hover:text-red-400" aria-label="Delete blackout"><Trash2 className="w-4 h-4" /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                </div>
               </motion.div>
             )}
 

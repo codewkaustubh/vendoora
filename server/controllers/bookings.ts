@@ -1,5 +1,7 @@
 import { Response } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
+import { checkBookingConflict } from './availability';
 
 export async function create(req: any, res: Response) {
   try {
@@ -36,22 +38,42 @@ export async function create(req: any, res: Response) {
       return res.status(404).json({ error: 'Vendor profile not found' });
     }
 
-    const booking = await prisma.booking.create({
-      data: {
-        clientId: req.user.id,
+    const parsedBookingDate = new Date(bookingDate);
+    if (Number.isNaN(parsedBookingDate.getTime())) {
+      return res.status(400).json({ error: 'Invalid booking date' });
+    }
+
+    const booking = await prisma.$transaction(async (tx) => {
+      const conflict = await checkBookingConflict(
+        tx,
         vendorId,
-        eventName,
-        eventDate: new Date(bookingDate),
-        startTime: String(bookingStartTime),
-        endTime: endTime ? String(endTime) : undefined,
-        venue: String(bookingVenue),
-        guestCount: guestCount !== undefined ? Number(guestCount) : undefined,
-        totalPrice: Number(totalPrice ?? 0),
-        bookingOtp: bookingOtp ? String(bookingOtp) : undefined,
-        otpVerified: otpVerified === true,
-        status: 'PENDING',
-      },
-    });
+        parsedBookingDate,
+        String(bookingStartTime),
+        endTime ? String(endTime) : undefined,
+      );
+      if (conflict) return { conflict };
+
+      return tx.booking.create({
+        data: {
+          clientId: req.user.id,
+          vendorId,
+          eventName,
+          eventDate: parsedBookingDate,
+          startTime: String(bookingStartTime),
+          endTime: endTime ? String(endTime) : undefined,
+          venue: String(bookingVenue),
+          guestCount: guestCount !== undefined ? Number(guestCount) : undefined,
+          totalPrice: Number(totalPrice ?? 0),
+          bookingOtp: bookingOtp ? String(bookingOtp) : undefined,
+          otpVerified: otpVerified === true,
+          status: 'PENDING',
+        },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+    if ('conflict' in booking) {
+      return res.status(409).json({ error: booking.conflict });
+    }
 
     // Notify the vendor
     await prisma.notification.create({
@@ -70,6 +92,9 @@ export async function create(req: any, res: Response) {
       booking,
     });
   } catch (error: any) {
+    if (error?.code === 'P2034') {
+      return res.status(409).json({ error: 'Another booking was created for this vendor at the same time' });
+    }
     return res.status(500).json({ error: error.message || 'Server error creating booking' });
   }
 }

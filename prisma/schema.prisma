@@ -77,6 +77,8 @@ model Vendor {
   services  Service[]
   reels     VibeReel[]
   reviews   Review[]
+  availability VendorAvailability[]
+  blackouts    Blackout[]
 
   @@index([city])
   @@index([state])
