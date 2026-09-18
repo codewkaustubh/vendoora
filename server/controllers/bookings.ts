@@ -4,6 +4,12 @@ import { prisma } from '../config/db';
 import { checkBookingConflict } from './availability';
 import { createNotification } from './notifications';
 
+export function buildBookingInquiryMessage(clientName: string, eventName: string, eventDate: Date | string, startTime: string): string {
+  const parsed = new Date(eventDate);
+  const day = Number.isNaN(parsed.getTime()) ? String(eventDate) : parsed.toISOString().slice(0, 10);
+  return `${clientName} requested services for "${eventName}" on ${day} at ${startTime}.`;
+}
+
 export async function create(req: any, res: Response) {
   try {
     const {
@@ -87,7 +93,7 @@ export async function create(req: any, res: Response) {
     }
 
     // Notify the vendor
-    await createNotification(vendor.userId, 'New Client Inquiry', `${req.user.name || 'A client'} requested services for "${eventName}" on ${date} at ${time}.`, 'inquiry');
+    await createNotification(vendor.userId, 'New Client Inquiry', buildBookingInquiryMessage(req.user.name || 'A client', eventName, booking.eventDate, booking.startTime), 'inquiry');
 
     return res.status(201).json({
       message: 'Inquiry placed successfully',
@@ -113,6 +119,7 @@ export async function getVendorBookings(req: any, res: Response) {
 
     const bookings = await prisma.booking.findMany({
       where: { vendorId: vendor.id },
+      include: { client: { select: { name: true } } },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -165,10 +172,18 @@ export async function updateStatus(req: any, res: Response) {
       return res.status(403).json({ error: 'Forbidden: You are not authorized to manage this booking' });
     }
 
-    const updated = await prisma.booking.update({
-      where: { id },
-      data: { status },
+    if (!['SCHEDULED', 'DECLINED'].includes(status)) {
+      return res.status(400).json({ error: 'Use fulfillment orders to manage paid bookings' });
+    }
+    if (booking.status === status) return res.status(200).json({ booking });
+    if (booking.status !== 'PENDING' || booking.paymentStatus === 'PAID') {
+      return res.status(409).json({ error: 'Only unpaid pending inquiries can be accepted or declined' });
+    }
+    const changed = await prisma.booking.updateMany({
+      where: { id, status: 'PENDING', paymentStatus: 'PENDING' }, data: { status },
     });
+    if (!changed.count) return res.status(409).json({ error: 'Booking changed; refresh and retry' });
+    const updated = await prisma.booking.findUnique({ where: { id } });
 
     // Notify the client about status update
     await createNotification(booking.clientId, `Inquiry ${status.toLowerCase()}`, `Your booking request for "${booking.eventName}" has been updated to "${status}".`, 'system');

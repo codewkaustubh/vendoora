@@ -60,6 +60,7 @@ export async function createOrder(req: any, res: Response) {
 
     const booking = await getOwnedBooking(String(bookingId), req.user.id);
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    if (!['PENDING', 'SCHEDULED'].includes(booking.status)) return res.status(409).json({ error: 'This booking cannot be paid' });
     const expectedAmount = amountInPaise(booking.totalPrice);
     if (!expectedAmount) return res.status(400).json({ error: 'Booking amount must be greater than zero' });
     if (!paymentAmountMatches(amount, expectedAmount)) {

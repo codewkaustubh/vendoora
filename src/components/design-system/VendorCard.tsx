@@ -6,19 +6,21 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { ShieldCheck, MapPin, Star } from 'lucide-react';
-import { Vendor } from '../../types';
+import { VendorCardModel } from '../../types';
 import { DesignTokens } from './tokens';
 
 export interface VendorCardProps {
   id?: string;
-  vendor: Vendor;
-  onClick?: (vendor: Vendor) => void;
+  vendor: VendorCardModel;
+  onClick?: (vendor: VendorCardModel) => void;
   className?: string;
   key?: React.Key;
 }
 
 export function VendorCard({ id, vendor, onClick, className = '' }: VendorCardProps) {
   const cardId = id || `vendor-card-${vendor.id}`;
+  const hasDistance = typeof vendor.distance === 'number';
+  const hasStartingPrice = typeof vendor.startingPrice === 'number';
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if ((e.key === 'Enter' || e.key === ' ') && onClick) {
@@ -101,11 +103,13 @@ export function VendorCard({ id, vendor, onClick, className = '' }: VendorCardPr
           </div>
         )}
 
-        {/* Distance indicator */}
-        <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-black/60 text-white backdrop-blur-sm rounded-full px-2.5 py-0.5 text-[10px] font-mono font-bold tracking-tight">
-          <MapPin className="w-3 h-3 text-red-400" />
-          <span>{vendor.distance.toFixed(1)} km</span>
-        </div>
+        {/* Distance indicator - only when the API actually provides a distance */}
+        {hasDistance && (
+          <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-black/60 text-white backdrop-blur-sm rounded-full px-2.5 py-0.5 text-[10px] font-mono font-bold tracking-tight">
+            <MapPin className="w-3 h-3 text-red-400" />
+            <span>{vendor.distance!.toFixed(1)} km</span>
+          </div>
+        )}
       </div>
 
       {/* Product / Vendor Info */}
@@ -138,8 +142,8 @@ export function VendorCard({ id, vendor, onClick, className = '' }: VendorCardPr
               Starting Price
             </span>
             <span className="text-zinc-900 dark:text-white font-bold font-mono text-base md:text-lg">
-              ₹{vendor.startingPrice.toLocaleString('en-IN')}
-              {vendor.category === 'Catering' ? ' /plate' : ''}
+              {hasStartingPrice ? `₹${vendor.startingPrice!.toLocaleString('en-IN')}` : 'On request'}
+              {hasStartingPrice && vendor.category === 'Catering' ? ' /plate' : ''}
             </span>
           </div>
 

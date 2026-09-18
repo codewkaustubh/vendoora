@@ -5,13 +5,27 @@
 
 import { motion } from 'motion/react';
 import { Tag, MapPin, Sparkles } from 'lucide-react';
-import { Product } from '../../types';
+import { ApiProduct, ProductCondition } from '../../types';
 import { BrandTokens } from '../vendoora/BrandTokens';
+
+const PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=800';
+
+/** The API returns the raw Prisma enum (MINT); the UI shows title case. */
+const CONDITION_LABELS: Record<ProductCondition, string> = {
+  MINT: 'Mint',
+  EXCELLENT: 'Excellent',
+  GOOD: 'Good',
+  FAIR: 'Fair',
+};
+
+export function formatConditionLabel(condition: ProductCondition | string): string {
+  return CONDITION_LABELS[condition as ProductCondition] || String(condition);
+}
 
 interface ProductCardProps {
   key?: string;
-  product: Product;
-  onSelect?: (product: Product) => void;
+  product: ApiProduct;
+  onSelect?: (product: ApiProduct) => void;
 }
 
 export default function ProductCard({ product, onSelect }: ProductCardProps) {
@@ -27,7 +41,7 @@ export default function ProductCard({ product, onSelect }: ProductCardProps) {
       {/* Thumbnail and Condition badges */}
       <div className="relative w-full h-36 rounded-[24px] overflow-hidden mb-3 bg-zinc-100 dark:bg-zinc-800 shrink-0">
         <img
-          src={product.image}
+          src={product.image || PLACEHOLDER_IMAGE}
           alt={product.name}
           referrerPolicy="no-referrer"
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -39,13 +53,13 @@ export default function ProductCard({ product, onSelect }: ProductCardProps) {
           className={`absolute top-3 left-3 flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm ${BrandTokens.colors.sunsetOrange} shadow-sm`}
         >
           <Sparkles className="w-3 h-3" />
-          <span>{product.condition}</span>
+          <span>{formatConditionLabel(product.condition)}</span>
         </div>
 
         {/* Location Badge */}
         <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-black/60 text-white backdrop-blur-sm rounded-full px-2.5 py-0.5 text-[9px] font-mono tracking-tight">
           <MapPin className="w-2.5 h-2.5 text-zinc-300" />
-          <span>{product.location}</span>
+          <span>{product.location || 'Location on request'}</span>
         </div>
       </div>
 
@@ -67,7 +81,7 @@ export default function ProductCard({ product, onSelect }: ProductCardProps) {
               Asking Price
             </span>
             <span className="text-zinc-950 dark:text-white font-bold font-mono text-sm md:text-base">
-              ₹{product.price.toLocaleString('en-IN')}
+              ₹{Number(product.price || 0).toLocaleString('en-IN')}
             </span>
           </div>
 

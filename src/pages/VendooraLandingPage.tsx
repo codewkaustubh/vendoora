@@ -40,15 +40,20 @@ import BudgetCalculatorModal from '../components/budget/BudgetCalculatorModal';
 import VendorTermsModal from '../components/vendor/VendorTermsModal';
 import LegalModal from '../components/vendoora/LegalModal';
 
-// Mock Data
+// Category catalog is still static: no categories API exists yet.
 import { CATEGORIES } from '../data/vendooraMockData';
+
+import { ApiProduct, ApiReel, ApiService, ApiVendor, AuthUser } from '../types';
+import { toVendorCardModels } from '../lib/vendorModels';
 
 interface VendooraLandingPageProps {
   id?: string;
   onSwitchToVendor: () => void;
-  reels?: any[];
-  products?: any[];
-  onAddNotification: (notification: any) => void;
+  reels?: ApiReel[];
+  products?: ApiProduct[];
+  currentUser?: AuthUser | null;
+  onOpenAuth?: (mode?: 'login' | 'register', role?: 'CLIENT' | 'VENDOR') => void;
+  onLogout?: () => void;
 }
 
 interface EventPackage {
@@ -115,14 +120,16 @@ export default function VendooraLandingPage({
   onSwitchToVendor,
   reels,
   products,
-  onAddNotification,
+  currentUser,
+  onOpenAuth,
+  onLogout,
 }: VendooraLandingPageProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedLocation, setSelectedLocation] = useState<string>('Mumbai, MH');
   const [activeTab, setActiveTab] = useState('home');
-  const [vendors, setVendors] = useState<any[]>([]);
-  const [services, setServices] = useState<any[]>([]);
+  const [vendors, setVendors] = useState<ApiVendor[]>([]);
+  const [services, setServices] = useState<ApiService[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [availability, setAvailability] = useState<any[]>([]);
@@ -198,7 +205,11 @@ export default function VendooraLandingPage({
       const [response, ordersResponse] = await Promise.all([fetch('/api/bookings/client', { headers }), fetch('/api/orders/client', { headers })]);
       const payload = await response.json().catch(() => ({}));
       const ordersPayload = await ordersResponse.json().catch(() => ({}));
-      if (response.status === 401 || response.status === 403) throw new Error('Please sign in as a customer to view bookings');
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('vendoora_token');
+        onLogout?.();
+        throw new Error('Please sign in as a customer to view bookings');
+      }
       if (!response.ok) throw new Error(payload?.error || 'Unable to load your bookings');
       setCustomerBookings(Array.isArray(payload?.bookings) ? payload.bookings : []);
       setCustomerOrders(ordersResponse.ok && Array.isArray(ordersPayload?.orders) ? ordersPayload.orders : []);
@@ -217,7 +228,7 @@ export default function VendooraLandingPage({
 
   useEffect(() => {
     loadCustomerBookings();
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
     if (!selectedInquiryVendor?.id) return;
@@ -268,19 +279,8 @@ export default function VendooraLandingPage({
     }
   };
 
-  const vendorCards = vendors.map((vendor) => {
-    const vendorServices = services.filter((service) => service.vendorId === vendor.id);
-    return {
-      ...vendor,
-      name: vendor.businessName,
-      startingPrice: vendorServices[0]?.startingPrice || 0,
-      image: vendor.logo || vendor.coverImage || '',
-      isVerified: vendor.verificationStatus === 'VERIFIED',
-      reviewsCount: vendor.totalReviews || 0,
-      location: `${vendor.city}, ${vendor.state}`,
-      distance: vendor.distance || 0,
-    };
-  });
+  // Derived display model: only real API fields, no fabricated distance/price.
+  const vendorCards = toVendorCardModels(vendors, services);
 
   // Dynamic filter for recommended vendors list based on selected category and query
   const filteredVendors = vendorCards.filter((vendor) => {
@@ -341,6 +341,7 @@ export default function VendooraLandingPage({
     const token = localStorage.getItem('vendoora_token');
     if (!token) {
       setBookingError('Please sign in as a customer before submitting a booking.');
+      onOpenAuth?.('login', 'CLIENT');
       return;
     }
     setBookingSubmitting(true);
@@ -364,20 +365,17 @@ export default function VendooraLandingPage({
         }),
       });
       const payload = await response.json().catch(() => ({}));
-      if (response.status === 401 || response.status === 403) throw new Error('Please sign in as a customer before submitting a booking.');
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('vendoora_token');
+        onLogout?.();
+        onOpenAuth?.('login', 'CLIENT');
+        throw new Error('Please sign in as a customer before submitting a booking.');
+      }
       if (response.status === 409) throw new Error(payload?.error || 'That time is no longer available. Please choose another slot.');
       if (!response.ok) throw new Error(payload?.error || 'Unable to submit booking');
 
       setBookingConfirmation({ ...payload.booking, order: payload.order });
       await loadCustomerBookings();
-      onAddNotification({
-        id: `n-${Date.now()}`,
-        title: 'Booking Request Submitted',
-        message: `Your request for "${inquiryEventName || selectedInquiryVendor.name}" was sent to the vendor.`,
-        time: 'Just now',
-        type: 'inquiry',
-        read: false,
-      });
       setSelectedInquiryVendor(null);
       setInquiryEventName('');
       setInquiryMessage('');
@@ -403,6 +401,7 @@ export default function VendooraLandingPage({
     const token = localStorage.getItem('vendoora_token');
     if (!token) {
       setPaymentError('Please sign in as a customer before paying.');
+      onOpenAuth?.('login', 'CLIENT');
       return;
     }
     setPaymentActionId(booking.id);
@@ -414,7 +413,12 @@ export default function VendooraLandingPage({
         body: JSON.stringify({ bookingId: booking.id, currency: 'INR' }),
       });
       const payload = await response.json().catch(() => ({}));
-      if (response.status === 401 || response.status === 403) throw new Error('Please sign in as a customer before paying.');
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('vendoora_token');
+        onLogout?.();
+        onOpenAuth?.('login', 'CLIENT');
+        throw new Error('Please sign in as a customer before paying.');
+      }
       if (!response.ok) throw new Error(payload?.error || 'Unable to start payment');
       if (!(await loadRazorpayCheckout())) throw new Error('Unable to load Razorpay checkout');
 
@@ -553,7 +557,9 @@ export default function VendooraLandingPage({
         }}
         onSearchChange={setSearchQuery}
         onLocationChange={setSelectedLocation}
-        onAccountClick={() => alert('Account authentication suite is preparing for main launch.')}
+        currentUser={currentUser}
+        onLoginClick={() => onOpenAuth?.('login', 'CLIENT')}
+        onLogoutClick={onLogout}
       />
 
       {/* Standalone Visual Welcome Banner preceding main search block */}
@@ -700,9 +706,6 @@ export default function VendooraLandingPage({
           <VibeReelsTray
             id="landing-vibe-reels"
             reels={reels}
-            onReelClick={(title) => {
-              alert(`Opening 15s visual showcase: "${title}" (Visual streaming is mock-only in this demo).`);
-            }}
           />
         </section>
 
@@ -767,8 +770,8 @@ export default function VendooraLandingPage({
                         </span>
                         <span className="text-zinc-400 font-normal">({vendor.reviewsCount} reviews)</span>
                       </div>
-                      <p className="text-zinc-400 text-xs leading-relaxed">
-                        Located in {vendor.location} • {vendor.distance} km away
+                                            <p className="text-zinc-400 text-xs leading-relaxed">
+                        Located in {vendor.location}{vendor.distance !== undefined ? ` • ${vendor.distance} km away` : ''}
                       </p>
                     </div>
 
@@ -778,7 +781,7 @@ export default function VendooraLandingPage({
                           Starting Price
                         </span>
                         <span className="text-zinc-950 font-mono font-bold text-sm">
-                          ₹{vendor.startingPrice.toLocaleString('en-IN')}
+                          {vendor.startingPrice !== undefined ? `₹${vendor.startingPrice.toLocaleString('en-IN')}` : 'On request'}
                         </span>
                       </div>
                       <Button

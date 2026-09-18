@@ -3,20 +3,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { VENDORS } from '../../data/vendooraMockData';
+import { ApiService, ApiVendor } from '../../types';
+import { toVendorCardModels } from '../../lib/vendorModels';
 import VendorCard from './VendorCard';
 import SectionShell from '../common/SectionShell';
 
 interface VendorSectionProps {
   id?: string;
   selectedCategory?: string;
+  /** Vendor records from `GET /api/vendors`. */
+  vendors?: ApiVendor[];
+  /** Service records from `GET /api/services`, used for starting prices. */
+  services?: ApiService[];
 }
 
-export default function VendorSection({ id, selectedCategory }: VendorSectionProps) {
+export default function VendorSection({ id, selectedCategory, vendors, services }: VendorSectionProps) {
+  const cards = toVendorCardModels(vendors || [], services || []);
   // Filter by category if one is active on landing page
   const filteredVendors = selectedCategory
-    ? VENDORS.filter((v) => v.category.toLowerCase() === selectedCategory.toLowerCase())
-    : VENDORS;
+    ? cards.filter((v) => v.category.toLowerCase() === selectedCategory.toLowerCase())
+    : cards;
 
   return (
     <SectionShell
@@ -33,7 +39,9 @@ export default function VendorSection({ id, selectedCategory }: VendorSectionPro
       ) : (
         <div className="w-full text-center py-12 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl bg-white/30 dark:bg-zinc-900/10">
           <p className="text-zinc-500 dark:text-zinc-400 text-sm font-medium">
-            No matching vendors found for "{selectedCategory}". Please select another category.
+            {selectedCategory
+              ? `No matching vendors found for "${selectedCategory}". Please select another category.`
+              : 'No vendors have joined yet. Check back soon for verified event partners.'}
           </p>
         </div>
       )}

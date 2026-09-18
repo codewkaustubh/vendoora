@@ -67,9 +67,31 @@ export const uploadMedia = async (req: any, res: Response) => {
       return res.status(400).json({ error: validationError });
     }
 
-    const folder = resolveMediaFolder(IMAGE_RESOURCE_TYPES[resourceType]);
-
+    // Authorize the target before incurring any Cloudinary upload. Draft listing
+    // media may use the authenticated owner/vendor ID before the record exists.
+    let draft = false;
+    let ownerId: string | undefined;
+    if (resourceType === 'userProfile') ownerId = targetId;
+    else if (resourceType === 'productImage') {
+      draft = targetId === req.user.id;
+      ownerId = draft ? req.user.id : (await prisma.product.findUnique({ where: { id: targetId } }))?.sellerId;
+    } else {
+      let vendorId = targetId;
+      if (resourceType === 'serviceCover') vendorId = (await prisma.service.findUnique({ where: { id: targetId } }))?.vendorId;
+      if (resourceType === 'inventoryImage' || resourceType === 'reelThumbnail') {
+        const ownVendor = await prisma.vendor.findUnique({ where: { userId: req.user.id } });
+        draft = ownVendor?.id === targetId;
+        if (!draft) vendorId = resourceType === 'inventoryImage'
+          ? (await prisma.inventoryItem.findUnique({ where: { id: targetId } }))?.vendorId
+          : (await prisma.vibeReel.findUnique({ where: { id: targetId } }))?.vendorId;
+      }
+      ownerId = vendorId ? (await prisma.vendor.findUnique({ where: { id: vendorId } }))?.userId : undefined;
+    }
+    if (!ownerId) return res.status(404).json({ error: 'Media target not found.' });
+    if (ownerId !== req.user.id && req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Forbidden: You do not own this media target.' });
+    const folder = `${resolveMediaFolder(IMAGE_RESOURCE_TYPES[resourceType])}/${ownerId}`;
     const uploadResult = await uploadToCloudinary(file!, folder);
+    if (draft) return res.status(200).json({ media: { url: uploadResult.secure_url, publicId: uploadResult.public_id, resourceType, folder } });
 
     if (resourceType === 'userProfile') {
       const user = await prisma.user.findUnique({ where: { id: targetId } });

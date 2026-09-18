@@ -5,16 +5,27 @@
 
 import { motion } from 'motion/react';
 import { Play, Eye } from 'lucide-react';
-import { REELS } from '../../data/vendooraMockData';
+import { ApiReel } from '../../types';
+
+const PLACEHOLDER_THUMBNAIL = 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=500';
+
+/** The reels API returns a numeric `views` counter; present it compactly. */
+export function formatReelViews(views: number): string {
+  const count = Number(views);
+  if (!Number.isFinite(count) || count <= 0) return '0';
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
+  return String(count);
+}
 
 interface VibeReelsTrayProps {
   id?: string;
   onReelClick?: (reelTitle: string) => void;
-  reels?: any[];
+  reels?: ApiReel[];
 }
 
 export default function VibeReelsTray({ id, onReelClick, reels }: VibeReelsTrayProps) {
-  const activeReels = reels || REELS;
+  const activeReels = reels || [];
   return (
     <div id={id || 'vibe-reels-tray'} className="w-full max-w-7xl mx-auto px-4 md:px-6 py-6 overflow-hidden">
       <div className="flex items-center justify-between mb-4">
@@ -29,6 +40,14 @@ export default function VibeReelsTray({ id, onReelClick, reels }: VibeReelsTrayP
         </div>
       </div>
 
+      {activeReels.length === 0 ? (
+        <div className="w-full text-center py-10 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
+          <p className="text-zinc-500 dark:text-zinc-400 text-xs font-medium">
+            No Vibe Reels have been published yet. Vendors can publish one from the Command Center.
+          </p>
+        </div>
+      ) : (
+      <>
       {/* Story Tray horizontal scroll track */}
       <div
         className="w-full overflow-x-auto overflow-y-hidden flex items-center gap-4 pb-3 scroll-smooth scrollbar-none"
@@ -44,7 +63,7 @@ export default function VibeReelsTray({ id, onReelClick, reels }: VibeReelsTrayP
           >
             {/* Visual Thumbnail */}
             <img
-              src={reel.thumbnail}
+              src={reel.thumbnail || PLACEHOLDER_THUMBNAIL}
               alt={reel.title}
               referrerPolicy="no-referrer"
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -66,17 +85,19 @@ export default function VibeReelsTray({ id, onReelClick, reels }: VibeReelsTrayP
               </span>
               <div className="flex items-center gap-1 text-[8px] font-mono font-medium text-pink-200">
                 <Eye className="w-2.5 h-2.5" />
-                <span>{reel.views}</span>
+                <span>{formatReelViews(reel.views)}</span>
               </div>
             </div>
 
-            {/* 15s Tag */}
+            {/* Duration Tag */}
             <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-[8px] font-bold text-white px-1.5 py-0.5 rounded-md">
-              0:15
+              {reel.duration || '0:15'}
             </div>
           </motion.div>
         ))}
       </div>
+      </>
+      )}
     </div>
   );
 }

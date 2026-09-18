@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, FormEvent } from 'react';
+import { apiRequest } from '../lib/api';
+import { useState, useEffect, useRef, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   LayoutDashboard,
@@ -35,9 +36,11 @@ import HeaderBar from '../components/layout/HeaderBar';
 import { Button, Input, Badge, Card, Toggle } from '../components/design-system';
 import { computeSuggestedPrice } from '../components/command-center/aiPricing';
 import VendorAnalyticsRow from '../components/command-center/VendorAnalyticsRow';
+import type { AuthUser } from '../types';
 
 // Types for local support
 interface VendorCommandCenterPageProps {
+  currentUser: AuthUser | null;
   id?: string;
   onBackToUserMode: () => void;
   reels: any[];
@@ -48,16 +51,12 @@ interface VendorCommandCenterPageProps {
   onUpdateInventoryItemRates: (itemId: string, hourly: number, daily: number) => void;
   products: any[];
   onAddProduct: (prod: any) => void;
-  bookings: any[];
-  onUpdateBookings: (bookings: any[]) => void;
-  onAddBooking: (booking: any) => void;
-  notifications: any[];
-  onAddNotification: (notif: any) => void;
-  onMarkNotificationRead: (id: string) => void;
-  onMarkAllNotificationsRead: () => void;
+    onOpenAuth?: (mode?: 'login' | 'register', role?: 'CLIENT' | 'VENDOR') => void;
+  onLogout?: () => void;
 }
 
 export default function VendorCommandCenterPage({
+  currentUser: incomingCurrentUser,
   id,
   onBackToUserMode,
   reels,
@@ -66,15 +65,10 @@ export default function VendorCommandCenterPage({
   inventory,
   onAddInventoryItem,
   onUpdateInventoryItemRates,
-  products,
+    products,
   onAddProduct,
-  bookings,
-  onUpdateBookings,
-  onAddBooking,
-  notifications,
-  onAddNotification,
-  onMarkNotificationRead,
-  onMarkAllNotificationsRead,
+  onOpenAuth,
+  onLogout,
 }: VendorCommandCenterPageProps) {
   // Navigation & Control States
   const [activeTab, setActiveTab] = useState<'analytics' | 'bookings' | 'availability' | 'inventory' | 'pricing' | 'seller' | 'reels' | 'notifications'>('analytics');
@@ -89,11 +83,6 @@ export default function VendorCommandCenterPage({
   const [blackoutReason, setBlackoutReason] = useState('');
   const [editingAvailabilityId, setEditingAvailabilityId] = useState<string | null>(null);
   const [editingBlackoutId, setEditingBlackoutId] = useState<string | null>(null);
-
-  // Countdown timer for next live setup dispatch
-  const [secondsLeft, setSecondsLeft] = useState(1 * 3600 + 42 * 60 + 15);
-  const [otpInput, setOtpInput] = useState('');
-  const [isOtpSuccess, setIsOtpSuccess] = useState(false);
 
   // New Inventory Form State
   const [newInvName, setNewInvName] = useState('');
@@ -130,7 +119,7 @@ export default function VendorCommandCenterPage({
   const [calcCrew, setCalcCrew] = useState(4);
 
   // Real authenticated user/vendor context for media uploads
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(incomingCurrentUser);
   const [currentVendor, setCurrentVendor] = useState<any>(null);
   const [currentVendorServices, setCurrentVendorServices] = useState<any[]>([]);
 
@@ -156,6 +145,24 @@ export default function VendorCommandCenterPage({
   const [orderError, setOrderError] = useState<string | null>(null);
   const [receivedReviews, setReceivedReviews] = useState<any[]>([]);
   const [persistedNotifications, setPersistedNotifications] = useState<any[]>([]);
+  const [notificationError, setNotificationError] = useState<string | null>(null);
+  const [notificationsSaving, setNotificationsSaving] = useState(false);
+  const markNotificationsRead = async (id?: string) => {
+    setNotificationError(null);
+    setNotificationsSaving(true);
+    try {
+      await apiRequest(id ? `/api/notifications/${id}/read` : '/api/notifications/read-all', { method: 'PUT' });
+      setPersistedNotifications((current) => current.map((item) => !id || item.id === id ? { ...item, read: true } : item));
+    } catch (error) {
+      setNotificationError(error instanceof Error ? error.message : 'Unable to mark notifications read');
+    } finally { setNotificationsSaving(false); }
+  };
+  const [vendorBookings, setVendorBookings] = useState<any[]>([]);
+  const bookings = vendorBookings.map((booking) => ({ ...booking,
+    status: booking.status.toLowerCase(), clientName: booking.client?.name || 'Customer',
+    date: String(booking.eventDate).slice(0, 10), time: booking.startTime, location: booking.venue,
+  }));
+  const [bookingError, setBookingError] = useState<string | null>(null);
 
   const profileUploadTargetId = currentUser?.id || null;
   const vendorUploadTargetId = currentVendor?.id || null;
@@ -212,6 +219,9 @@ export default function VendorCommandCenterPage({
           const notificationsResponse = await fetch('/api/notifications', { headers: { Authorization: `Bearer ${token}` } });
           const notificationsPayload = await notificationsResponse.json().catch(() => ({}));
           if (notificationsResponse.ok) setPersistedNotifications(Array.isArray(notificationsPayload?.notifications) ? notificationsPayload.notifications : []);
+          const bookingsResponse = await fetch('/api/bookings/vendor', { headers: { Authorization: `Bearer ${token}` } });
+          const bookingsPayload = await bookingsResponse.json().catch(() => ({}));
+          if (bookingsResponse.ok) setVendorBookings(Array.isArray(bookingsPayload?.bookings) ? bookingsPayload.bookings : []);
         }
 
         const servicesResponse = await fetch('/api/services');
@@ -357,44 +367,10 @@ export default function VendorCommandCenterPage({
     }
   };
 
-  // Verification code validation is simple: any 4+ digits releases HDFC settlement
-  const handleVerifyOtpSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (otpInput.length >= 4) {
-      setIsOtpSuccess(true);
-      onAddNotification({
-        id: `n-${Date.now()}`,
-        title: 'Settlement Released',
-        message: 'OTP check verified. HDFC automated payout disbursement of ₹1,20,000 completed successfully.',
-        time: 'Just now',
-        type: 'payment',
-        read: false,
-      });
-      setOtpInput('');
-    }
-  };
-
-  // Dispatch live countdown ticking
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setSecondsLeft((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const formatTime = (secs: number) => {
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    const s = secs % 60;
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
-  const isCritical = secondsLeft < 2 * 3600;
-
   // Derive active items & counts
-  const visibleNotifications = persistedNotifications.length ? persistedNotifications : notifications;
+  const visibleNotifications = persistedNotifications;
   const unreadNotifCount = visibleNotifications.filter((n) => !n.read).length;
-  const pendingBookingsCount = bookings.filter((b) => b.status === 'pending').length;
+    const pendingBookingsCount = vendorBookings.filter((b) => b.status === 'PENDING').length;
 
   // Add new inventory handler
   const handleAddNewInventorySubmit = async (e: FormEvent) => {
@@ -428,16 +404,19 @@ export default function VendorCommandCenterPage({
         image: uploadedUrl,
       };
 
-      onAddInventoryItem(newItem);
+                  await onAddInventoryItem(newItem);
 
-      onAddNotification({
-        id: `n-${Date.now()}`,
-        title: 'Inventory Feed Expanded',
-        message: `Successfully listed "${newInvName}" (${newInvUnits} Units) in your live customer catalog.`,
-        time: 'Just now',
-        type: 'system',
-        read: false,
-      });
+      setPersistedNotifications((prev) => [
+        {
+          id: `n-${Date.now()}`,
+          title: 'Inventory Feed Expanded',
+          message: `Successfully listed "${newInvName}" (${newInvUnits} Units) in your live customer catalog.`,
+          time: 'Just now',
+          type: 'system',
+          read: false,
+        },
+        ...prev,
+      ]);
 
       setNewInvName('');
       setNewInvUploadFile(null);
@@ -472,20 +451,23 @@ export default function VendorCommandCenterPage({
         name: newGearName,
         price: suggestedPrice,
         condition: newGearCondition,
-        location: 'Mumbai, MH',
+        location: [currentVendor?.city, currentVendor?.state].filter(Boolean).join(', '),
         image: uploadedImage,
       };
 
-      onAddProduct(newProd);
+      await onAddProduct(newProd);
 
-      onAddNotification({
-        id: `n-${Date.now()}`,
-        title: 'Secondary Listing Published',
-        message: `Pre-owned "${newGearName}" is now active in the Vendoora equipment marketplace. Resale Price: ₹${suggestedPrice.toLocaleString('en-IN')}.`,
-        time: 'Just now',
-        type: 'system',
-        read: false,
-      });
+      setPersistedNotifications((prev) => [
+        {
+          id: `n-${Date.now()}`,
+          title: 'Secondary Listing Published',
+          message: `Pre-owned "${newGearName}" is now active in the Vendoora equipment marketplace. Resale Price: ₹${suggestedPrice.toLocaleString('en-IN')}.`,
+          time: 'Just now',
+          type: 'system',
+          read: false,
+        },
+        ...prev,
+      ]);
 
       setNewGearName('');
       setNewGearUploadFile(null);
@@ -518,20 +500,23 @@ export default function VendorCommandCenterPage({
         id: `r-${Date.now()}`,
         title: newReelTitle,
         thumbnail: uploadedThumbnail,
-        views: '1.2K',
+        views: 0,
         duration: '0:15',
       };
 
-      onAddReel(newReel);
+      await onAddReel(newReel);
 
-      onAddNotification({
-        id: `n-${Date.now()}`,
-        title: 'Vibe Reel Published',
-        message: `Your new 15s visual showcase "${newReelTitle}" is now live on the Vendoora exploration tray.`,
-        time: 'Just now',
-        type: 'system',
-        read: false,
-      });
+      setPersistedNotifications((prev) => [
+        {
+          id: `n-${Date.now()}`,
+          title: 'Vibe Reel Published',
+          message: `Your new 15s visual showcase "${newReelTitle}" is now live on the Vendoora exploration tray.`,
+          time: 'Just now',
+          type: 'system',
+          read: false,
+        },
+        ...prev,
+      ]);
 
       setNewReelTitle('');
       setNewReelUploadFile(null);
@@ -543,71 +528,16 @@ export default function VendorCommandCenterPage({
     }
   };
 
-  // Simulation generator
-  const triggerSimulationBooking = () => {
-    const clients = ['Karan Johar', 'Aishwarya Sen', 'Vikram Seth', 'Priyanjali Roy', 'Gautam Adani'];
-    const occasions = ['Royal Sangeet Gala', 'Mehendi Poolside Party', 'Elite DJ Night Launch', 'Luxury Banquet Reception', 'Sunset Beach Mandap Setup'];
-    const budgets = ['₹2,50,000 Premium', '₹4,50,000 Shahi', '₹1,80,000 Sufi Night', '₹1,20,000 Classic'];
-    
-    const randomClient = clients[Math.floor(Math.random() * clients.length)];
-    const randomOccasion = occasions[Math.floor(Math.random() * occasions.length)];
-    const randomBudget = budgets[Math.floor(Math.random() * budgets.length)];
-
-    const newBooking = {
-      id: `e-${Date.now()}`,
-      eventName: `${randomOccasion} (Simulated)`,
-      clientName: `${randomClient} (Client)`,
-      date: '2026-07-28',
-      time: '19:30',
-      location: 'Marine Drive Pavilion, Mumbai',
-      status: 'pending' as const,
-    };
-
-    onAddBooking(newBooking);
-
-    onAddNotification({
-      id: `n-${Date.now()}`,
-      title: 'Booking Inquiry Received',
-      message: `New request from ${randomClient} for a "${randomOccasion}" on 2026-07-28. Estimated matching tier: ${randomBudget}.`,
-      time: 'Just now',
-      type: 'inquiry',
-      read: false,
-    });
-
-    setActiveTab('bookings');
-    alert(`💡 SIMULATION TRIGERRED: A real client inquiry has been placed! Check the Bookings section below to Accept or Reject.`);
+  const updateBooking = async (bookingId: string, status: string) => {
+    try {
+      const payload = await availabilityRequest(`/api/bookings/${bookingId}/status`, {
+        method: 'PUT', body: JSON.stringify({ status }),
+      });
+      setVendorBookings((current) => current.map((booking) => booking.id === bookingId ? { ...booking, ...payload.booking } : booking));
+    } catch (error) { setBookingError(error instanceof Error ? error.message : 'Unable to update booking'); }
   };
-
-  // Reject Booking
-  const handleRejectBooking = (bookingId: string) => {
-    const updated = bookings.filter((b) => b.id !== bookingId);
-    onUpdateBookings(updated);
-    onAddNotification({
-      id: `n-${Date.now()}`,
-      title: 'Booking Inquiry Declined',
-      message: 'You declined an event inquiry. The client has been notified to match alternative suppliers.',
-      time: 'Just now',
-      type: 'system',
-      read: false,
-    });
-  };
-
-  // Accept Booking
-  const handleAcceptBooking = (bookingId: string) => {
-    const updated = bookings.map((b) =>
-      b.id === bookingId ? { ...b, status: 'scheduled' as const } : b
-    );
-    onUpdateBookings(updated);
-    onAddNotification({
-      id: `n-${Date.now()}`,
-      title: 'Inquiry Scheduled',
-      message: 'Congratulations! Booking inquiry accepted and locked in the logistics timeline schedule.',
-      time: 'Just now',
-      type: 'system',
-      read: false,
-    });
-    alert('Inquiry successfully accepted! The setup crew dispatch has been integrated into your live timeline.');
-  };
+  const handleRejectBooking = (bookingId: string) => updateBooking(bookingId, 'DECLINED');
+  const handleAcceptBooking = (bookingId: string) => updateBooking(bookingId, 'SCHEDULED');
 
   // Filtered Notifications
   const filteredNotifs = visibleNotifications.filter((n) => {
@@ -776,6 +706,9 @@ export default function VendorCommandCenterPage({
             onBackToUserMode();
           }
         }}
+        currentUser={incomingCurrentUser}
+        onLoginClick={() => onOpenAuth?.('login', 'VENDOR')}
+        onLogoutClick={onLogout}
       />
 
       {/* Main Split Layout */}
@@ -792,11 +725,11 @@ export default function VendorCommandCenterPage({
             <div className="p-4 border-b border-zinc-900 flex items-center justify-between">
               <div>
                 <span className="text-[9px] font-black tracking-widest text-[#6366F1] uppercase">Vendoora Elite</span>
-                <h3 className="font-heading font-black text-white text-base mt-0.5 uppercase tracking-tight">{currentVendor?.businessName || 'Sharma Tent House'}</h3>
+                <h3 className="font-heading font-black text-white text-base mt-0.5 uppercase tracking-tight">{currentVendor?.businessName || 'Vendor profile'}</h3>
                 <div className="flex items-center gap-1.5 mt-1">
                   <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-                  <span className="text-xs font-bold text-zinc-300">4.85 Rating</span>
-                  <Badge variant="success" size="sm" className="scale-90 origin-left">Verified</Badge>
+                  <span className="text-xs font-bold text-zinc-300">{currentVendor?.totalReviews ? currentVendor.rating.toFixed(2) : 'Not yet rated'}</span>
+                  <Badge variant="secondary" size="sm">{currentVendor?.verificationStatus || 'PENDING'}</Badge>
                 </div>
               </div>
             </div>
@@ -1027,33 +960,13 @@ export default function VendorCommandCenterPage({
             </div>
           </Card>
 
-          {/* Simulate Action widget */}
-          <Card
-            variant="glass"
-            padding="sm"
-            className="border-dashed border-indigo-500/30 bg-indigo-500/5 rounded-[28px] p-5 space-y-3 shadow-lg text-center"
-          >
-            <Sparkles className="w-5 h-5 text-indigo-400 mx-auto animate-pulse" />
-            <div className="space-y-1">
-              <h5 className="font-heading font-extrabold text-white text-xs uppercase tracking-wide">Developer Tools</h5>
-              <p className="text-[10px] text-zinc-400 leading-relaxed">
-                Trigger a live client booking request simulation on the home page and watch it update this dashboard!
-              </p>
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={triggerSimulationBooking}
-              className="w-full py-2.5 text-[10px] font-extrabold uppercase tracking-widest bg-gradient-to-r from-purple-500 to-indigo-500 border-none shadow-md shadow-indigo-950/50"
-            >
-              Simulate Live Booking
-            </Button>
-          </Card>
+
         </aside>
 
         {/* Right Side: Active Workspace View */}
         <main className="lg:col-span-9 space-y-8 min-h-[70vh]">
           
+          {bookingError && <p role="alert" className="text-red-400">{bookingError}</p>}
           {/* Active Tab rendering via AnimatePresence */}
           <AnimatePresence mode="wait">
             {activeTab === 'analytics' && (
@@ -1072,7 +985,7 @@ export default function VendorCommandCenterPage({
                 <VendorAnalyticsRow
                   monthlyEarnings={paymentSummary ? paymentSummary.paidAmountPaise / 100 : 0}
                   activeInquiries={pendingBookingsCount}
-                  rating={4.85}
+                  rating={currentVendor?.totalReviews ? currentVendor.rating : 0}
                 />
 
                 {paymentSummary && (
@@ -1091,64 +1004,6 @@ export default function VendorCommandCenterPage({
                       {receivedReviews.length === 0 ? <p className="text-xs text-zinc-500">Completed-order reviews will appear here.</p> : receivedReviews.slice(0, 8).map((review) => <div key={review.id} className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-3"><p className="text-xs font-bold text-white">{review.user?.name || 'Customer'} · {review.rating}/5</p><p className="text-xs text-zinc-400 mt-1">{review.comment || 'No comment provided.'}</p></div>)}
                     </Card>
 
-                <Card variant="glass" className="border-zinc-800 bg-zinc-950/40 backdrop-blur-md rounded-[32px] p-6 md:p-8 space-y-6">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h4 className="font-heading font-semibold text-white text-base">Celebration Season Targets</h4>
-                      <p className="text-zinc-500 text-xs mt-0.5">Cumulative progress on your quarterly professional revenue milestones</p>
-                    </div>
-                    <Badge variant="primary">Q3 Peak Season</Badge>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
-                    {/* Goal Card 1 */}
-                    <div className="space-y-2 bg-zinc-900/20 p-5 rounded-2xl border border-zinc-850">
-                      <div className="flex justify-between text-xs text-zinc-400 font-bold uppercase">
-                        <span>Revenue Accomplished</span>
-                        <span className="text-indigo-400 font-mono">₹2,45,000 / ₹3,00,000</span>
-                      </div>
-                      <div className="w-full h-2.5 bg-zinc-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full w-[81.6%]" />
-                      </div>
-                      <p className="text-[10px] text-zinc-500">81.6% achieved • You are on pace to clear your monsoon season bonus milestones!</p>
-                    </div>
-
-                    {/* Goal Card 2 */}
-                    <div className="space-y-2 bg-zinc-900/20 p-5 rounded-2xl border border-zinc-850">
-                      <div className="flex justify-between text-xs text-zinc-400 font-bold uppercase">
-                        <span>Average Response Latency</span>
-                        <span className="text-emerald-400 font-mono">14 Mins avg</span>
-                      </div>
-                      <div className="w-full h-2.5 bg-zinc-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-500 rounded-full w-[95%]" />
-                      </div>
-                      <p className="text-[10px] text-zinc-500">Highly Critical • Ranked in the **top 5%** of Maharashtra on-site dispatchers.</p>
-                    </div>
-                  </div>
-
-                  {/* Customer Rating distribution */}
-                  <div className="border-t border-zinc-900 pt-6 mt-4">
-                    <h5 className="text-xs font-bold uppercase text-zinc-400 tracking-wider mb-4">Verification Checkpoints & Compliance</h5>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
-                      <div className="p-4 bg-zinc-900/30 rounded-xl border border-zinc-900">
-                        <span className="block text-[8px] uppercase tracking-wider text-zinc-500 font-bold">GSTIN Verified</span>
-                        <span className="text-xs font-mono font-bold text-emerald-400 mt-1 block">PASS</span>
-                      </div>
-                      <div className="p-4 bg-zinc-900/30 rounded-xl border border-zinc-900">
-                        <span className="block text-[8px] uppercase tracking-wider text-zinc-500 font-bold">SLA Guarantee</span>
-                        <span className="text-xs font-mono font-bold text-emerald-400 mt-1 block">99.2% ON TIME</span>
-                      </div>
-                      <div className="p-4 bg-zinc-900/30 rounded-xl border border-zinc-900">
-                        <span className="block text-[8px] uppercase tracking-wider text-zinc-500 font-bold">Insurance coverage</span>
-                        <span className="text-xs font-mono font-bold text-zinc-400 mt-1 block">₹5,00,000 SECURE</span>
-                      </div>
-                      <div className="p-4 bg-zinc-900/30 rounded-xl border border-zinc-900">
-                        <span className="block text-[8px] uppercase tracking-wider text-zinc-500 font-bold">Payouts settled</span>
-                        <span className="text-xs font-mono font-bold text-indigo-400 mt-1 block">AUTOMATED</span>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
               </motion.div>
             )}
 
@@ -1230,7 +1085,7 @@ export default function VendorCommandCenterPage({
               >
                 <div>
                   <h2 className="text-xl md:text-2xl font-black font-heading text-white uppercase tracking-tight">Active Bookings & Logistics Manager</h2>
-                  <p className="text-zinc-500 text-xs mt-0.5">Approve incoming customer celebration inquiries and verify on-site payout OTP releases</p>
+                  <p className="text-zinc-500 text-xs mt-0.5">Manage customer inquiries and paid-order fulfillment</p>
                 </div>
 
                 {/* 1. Pending Inquiries Segment */}
@@ -1247,7 +1102,7 @@ export default function VendorCommandCenterPage({
                     <div className="text-center py-10 space-y-2">
                       <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
                       <p className="text-sm text-zinc-400 font-medium">Inquiry queue cleared!</p>
-                      <p className="text-xs text-zinc-500">Click the Developer Simulation button in the sidebar to generate custom user booking leads.</p>
+                      <p className="text-xs text-zinc-500">New customer inquiries will appear here.</p>
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -1315,105 +1170,6 @@ export default function VendorCommandCenterPage({
                   ))}
                 </Card>
 
-                {/* 2. Dispatch Logistics Timeline */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-                  <div className="lg:col-span-7">
-                    <Card variant="glass" className="border-zinc-800 bg-zinc-950/40 rounded-[32px] p-6 space-y-6 h-full">
-                      <div>
-                        <h4 className="font-heading font-semibold text-white text-base">Active Logistics Timeline</h4>
-                        <p className="text-zinc-500 text-xs mt-0.5">On-site equipment dispatch and setup calendar locks</p>
-                      </div>
-
-                      <div className="relative pl-6 space-y-8 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-[2px] before:bg-zinc-800">
-                        {bookings.filter((b) => b.status !== 'pending').map((event) => (
-                          <div key={event.id} className="relative flex justify-between items-center gap-4">
-                            <div className={`absolute -left-[21px] w-[11px] h-[11px] rounded-full border-2 ${event.status === 'in_progress' ? 'bg-pink-500 border-pink-400 animate-pulse' : 'bg-zinc-800 border-zinc-700'}`} />
-                            <div className="space-y-0.5">
-                              <span className="block text-[10px] font-mono text-zinc-500">{event.date} • {event.time} hrs</span>
-                              <h5 className="font-heading font-semibold text-white text-xs sm:text-sm">{event.eventName}</h5>
-                              <p className="text-[11px] text-zinc-500">{event.location}</p>
-                            </div>
-                            <Badge variant={event.status === 'in_progress' ? 'danger' : 'secondary'} size="sm">
-                              {event.status === 'in_progress' ? 'Live Setup' : 'Confirmed'}
-                            </Badge>
-                          </div>
-                        ))}
-                      </div>
-                    </Card>
-                  </div>
-
-                  {/* 3. OTP Settlement released */}
-                  <div className="lg:col-span-5 flex flex-col justify-between gap-6">
-                    <Card variant="glass" className="border-zinc-800 bg-zinc-950/40 rounded-[32px] p-6 space-y-4 flex-1 flex flex-col justify-center">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-500">Next Dispatch countdown</span>
-                        <Timer className={`w-4 h-4 ${isCritical ? 'text-red-500 animate-pulse' : 'text-zinc-400'}`} />
-                      </div>
-
-                      <div className="space-y-1">
-                        <h4 className="text-[10px] font-bold text-zinc-500 uppercase">Setup time remaining</h4>
-                        <div className={`text-3xl md:text-4xl font-extrabold font-mono tracking-tighter ${isCritical ? 'text-red-500 animate-pulse filter drop-shadow-[0_0_8px_rgba(239,68,68,0.2)]' : 'text-white'}`}>
-                          {formatTime(secondsLeft)}
-                        </div>
-                      </div>
-
-                      <p className="text-[10px] text-zinc-500 leading-relaxed font-sans">
-                        {isCritical ? (
-                          <span className="text-red-400 font-semibold">🚨 Warning: Less than 2 hours to setup! Get your crew checked-in.</span>
-                        ) : (
-                          <span>*Ensure crew dispatches and trucks are loaded prior to timer countdown termination.</span>
-                        )}
-                      </p>
-                    </Card>
-
-                    <Card variant="glass" className="border-zinc-800 bg-zinc-950/40 rounded-[32px] p-6 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-500">OTP Settlement</span>
-                        <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                      </div>
-
-                      <AnimatePresence mode="wait">
-                        {!isOtpSuccess ? (
-                          <motion.form
-                            key="otp-form"
-                            onSubmit={handleVerifyOtpSubmit}
-                            className="space-y-3"
-                          >
-                            <div className="space-y-1.5">
-                              <label className="text-[10px] text-zinc-400 font-bold uppercase block">Enter completion OTP</label>
-                              <div className="flex gap-2">
-                                <Input
-                                  type="text"
-                                  maxLength={6}
-                                  required
-                                  placeholder="e.g. 5249"
-                                  value={otpInput}
-                                  onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))}
-                                  className="font-mono tracking-widest text-sm text-center bg-zinc-950 border-zinc-800"
-                                />
-                                <Button type="submit" variant="primary" className="py-2.5 font-bold uppercase tracking-wide px-4">
-                                  Verify
-                                </Button>
-                              </div>
-                            </div>
-                            <p className="text-[9px] text-zinc-500">*Input client-provided OTP on-site to release automated escrow funds.</p>
-                          </motion.form>
-                        ) : (
-                          <motion.div
-                            key="otp-success"
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="text-center p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl space-y-2"
-                          >
-                            <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto animate-bounce" />
-                            <h5 className="font-heading font-bold text-xs text-white">Verification Complete!</h5>
-                            <p className="text-[10px] text-zinc-400 leading-relaxed font-mono">₹1,20,000 release processed directly to HDFC settling nodes.</p>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </Card>
-                  </div>
-                </div>
               </motion.div>
             )}
 
@@ -2013,7 +1769,8 @@ export default function VendorCommandCenterPage({
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={onMarkAllNotificationsRead}
+                      onClick={() => markNotificationsRead()}
+                      disabled={notificationsSaving}
                       className="text-xs font-bold border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-900 bg-transparent"
                     >
                       Mark All Read
@@ -2022,6 +1779,7 @@ export default function VendorCommandCenterPage({
                 </div>
 
                 <Card variant="glass" className="border-zinc-800 bg-zinc-950/40 rounded-[32px] p-6 space-y-6">
+                  {notificationError && <p role="alert" className="text-red-400 text-xs">{notificationError}</p>}
                   {/* Category filters */}
                   <div className="flex items-center gap-2 border-b border-zinc-900 pb-4 overflow-x-auto">
                     <button
@@ -2066,15 +1824,7 @@ export default function VendorCommandCenterPage({
                       {filteredNotifs.map((log) => (
                         <div
                           key={log.id}
-                          onClick={async () => {
-                            if (persistedNotifications.length) {
-                              const token = localStorage.getItem('vendoora_token');
-                              if (token) {
-                                const response = await fetch(`/api/notifications/${log.id}/read`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` } });
-                                if (response.ok) setPersistedNotifications((current) => current.map((item) => item.id === log.id ? { ...item, read: true } : item));
-                              }
-                            } else onMarkNotificationRead(log.id);
-                          }}
+                          onClick={() => { if (!notificationsSaving) void markNotificationsRead(log.id); }}
                           className={`p-4 rounded-xl border transition-all cursor-pointer flex justify-between items-start gap-4 ${log.read ? 'bg-zinc-900/10 border-zinc-900/60 text-zinc-400' : 'bg-[#6366F1]/5 border-[#6366F1]/20 text-zinc-200'}`}
                         >
                           <div className="space-y-1">

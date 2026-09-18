@@ -62,13 +62,16 @@ export async function markRead(req: any, res: Response) {
   }
 }
 
+export async function markAllNotificationsRead(db: { notification: { updateMany: Function } }, userId: string) {
+  await db.notification.updateMany({
+    where: { userId, read: false },
+    data: { read: true, readAt: new Date() },
+  });
+}
+
 export async function markAllRead(req: any, res: Response) {
   try {
-    await prisma.notification.updateMany({
-      where: { userId: req.user.id, read: false },
-      data: { read: true, readAt: new Date() },
-    });
-
+    await markAllNotificationsRead(prisma, req.user.id);
     return res.status(200).json({ message: 'All notifications marked as read' });
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Server error marking all notifications read' });

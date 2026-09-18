@@ -9,6 +9,8 @@ import { Search, User, Sparkles, LogOut, ShieldAlert } from 'lucide-react';
 import { BrandTokens } from '../vendoora/BrandTokens';
 import LocationPicker from '../vendoora/LocationPicker';
 
+import { AuthUser } from '../../types';
+
 interface HeaderBarProps {
   id?: string;
   vendorMode: boolean;
@@ -16,6 +18,9 @@ interface HeaderBarProps {
   onSearchChange?: (term: string) => void;
   onLocationChange?: (location: string) => void;
   onAccountClick?: () => void;
+  currentUser?: AuthUser | null;
+  onLoginClick?: () => void;
+  onLogoutClick?: () => void;
 }
 
 export default function HeaderBar({
@@ -25,6 +30,9 @@ export default function HeaderBar({
   onSearchChange,
   onLocationChange,
   onAccountClick,
+  currentUser,
+  onLoginClick,
+  onLogoutClick,
 }: HeaderBarProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -59,20 +67,65 @@ export default function HeaderBar({
             </h1>
           </motion.div>
 
-          {/* Account/Login Icon Button adjacent to wordmark */}
-          <motion.button
-            id="account-login-btn"
-            onClick={onAccountClick}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className={`p-2 rounded-full border flex items-center justify-center transition-all ${
-              vendorMode
-                ? 'border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:text-[#6366F1]'
-                : 'border-zinc-200/60 bg-white/60 text-zinc-700 hover:text-[#1E40AF]'
-            }`}
-          >
-            <User className="w-4 h-4" />
-          </motion.button>
+          {/* Account/Login or User Session info */}
+          {currentUser ? (
+            <div className="flex items-center gap-2">
+              <div
+                id="header-user-chip"
+                className={`flex items-center gap-2 pl-1.5 pr-2.5 py-1 rounded-full border text-xs ${
+                  vendorMode
+                    ? 'border-zinc-800 bg-zinc-900/60 text-zinc-300'
+                    : 'border-zinc-200/80 bg-white/70 text-zinc-700 shadow-sm'
+                }`}
+              >
+                <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-indigo-600 to-violet-500 text-white flex items-center justify-center font-bold text-[11px] uppercase">
+                  {currentUser.name ? currentUser.name.charAt(0) : 'U'}
+                </div>
+                <span className="font-semibold max-w-[120px] truncate hidden sm:inline">
+                  {currentUser.name}
+                </span>
+                <span
+                  className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full ${
+                    currentUser.role === 'VENDOR'
+                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300'
+                      : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300'
+                  }`}
+                >
+                  {currentUser.role === 'VENDOR' ? 'Vendor' : 'Customer'}
+                </span>
+              </div>
+
+              <motion.button
+                id="header-logout-btn"
+                onClick={onLogoutClick}
+                title="Sign out of account"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className={`p-2 rounded-full border flex items-center justify-center transition-all ${
+                  vendorMode
+                    ? 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:text-red-400 hover:border-red-500/40'
+                    : 'border-zinc-200/80 bg-white/70 text-zinc-600 hover:text-red-600 hover:border-red-300 shadow-sm'
+                }`}
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </motion.button>
+            </div>
+          ) : (
+            <motion.button
+              id="account-login-btn"
+              onClick={onLoginClick || onAccountClick}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className={`px-3 py-1.5 rounded-full border flex items-center gap-1.5 text-xs font-semibold transition-all ${
+                vendorMode
+                  ? 'border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:text-[#6366F1]'
+                  : 'border-zinc-200/80 bg-white/70 text-zinc-700 hover:text-[#1E40AF] shadow-sm'
+              }`}
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>Sign In</span>
+            </motion.button>
+          )}
         </div>
 
         {/* Center Pill: Location Picker & Search (Hidden in dashboard/vendor mode to keep clutter low) */}

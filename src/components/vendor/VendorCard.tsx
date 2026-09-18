@@ -5,17 +5,19 @@
 
 import { motion } from 'motion/react';
 import { ShieldCheck, MapPin, BadgePercent } from 'lucide-react';
-import { Vendor } from '../../types';
+import { VendorCardModel } from '../../types';
 import StarRating from '../common/StarRating';
 import { BrandTokens } from '../vendoora/BrandTokens';
 
 interface VendorCardProps {
   key?: string;
-  vendor: Vendor;
-  onSelect?: (vendor: Vendor) => void;
+  vendor: VendorCardModel;
+  onSelect?: (vendor: VendorCardModel) => void;
 }
 
 export default function VendorCard({ vendor, onSelect }: VendorCardProps) {
+  const hasDistance = typeof vendor.distance === 'number';
+  const hasStartingPrice = typeof vendor.startingPrice === 'number';
   return (
     <motion.div
       id={`vendor-card-${vendor.id}`}
@@ -45,11 +47,13 @@ export default function VendorCard({ vendor, onSelect }: VendorCardProps) {
           </div>
         )}
 
-        {/* Distance indicator */}
-        <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-black/60 text-white backdrop-blur-sm rounded-full px-2.5 py-0.5 text-[10px] font-mono font-bold tracking-tight">
-          <MapPin className="w-3 h-3 text-red-400" />
-          <span>{vendor.distance.toFixed(1)} km</span>
-        </div>
+        {/* Distance indicator - only when the API actually provides one */}
+        {hasDistance && (
+          <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-black/60 text-white backdrop-blur-sm rounded-full px-2.5 py-0.5 text-[10px] font-mono font-bold tracking-tight">
+            <MapPin className="w-3 h-3 text-red-400" />
+            <span>{vendor.distance!.toFixed(1)} km</span>
+          </div>
+        )}
       </div>
 
       {/* Product / Vendor Info */}
@@ -82,8 +86,8 @@ export default function VendorCard({ vendor, onSelect }: VendorCardProps) {
               Starting Price
             </span>
             <span className="text-zinc-900 dark:text-white font-bold font-mono text-base md:text-lg">
-              ₹{vendor.startingPrice.toLocaleString('en-IN')}
-              {vendor.category === 'Catering' ? ' /plate' : ''}
+              {hasStartingPrice ? `₹${vendor.startingPrice!.toLocaleString('en-IN')}` : 'On request'}
+              {hasStartingPrice && vendor.category === 'Catering' ? ' /plate' : ''}
             </span>
           </div>
 

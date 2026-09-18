@@ -8,6 +8,7 @@ export async function searchDiscovery(req: Request, res: Response) {
       type = 'all', // all, vendors, services, products
       category,
       city,
+      location = city,
       state,
       minPrice,
       maxPrice,
@@ -17,6 +18,13 @@ export async function searchDiscovery(req: Request, res: Response) {
       limit = '12',
     } = req.query;
 
+    const numericFilters = [minPrice, maxPrice, minRating].filter((value) => value !== undefined);
+    if (!['all', 'vendors', 'services', 'products'].includes(String(type)) ||
+        numericFilters.some((value) => typeof value !== 'string' || value.trim() === '' || !Number.isFinite(Number(value)) || Number(value) < 0) ||
+        (minRating !== undefined && Number(minRating) > 5) ||
+        (minPrice !== undefined && maxPrice !== undefined && Number(minPrice) > Number(maxPrice))) {
+      return res.status(400).json({ error: 'Invalid search type or numeric filters' });
+    }
     const pageNum = Math.max(1, parseInt(String(page)) || 1);
     const pageSize = Math.min(50, Math.max(1, parseInt(String(limit)) || 12));
     const skip = (pageNum - 1) * pageSize;
@@ -66,9 +74,8 @@ export async function searchDiscovery(req: Request, res: Response) {
         ];
       }
 
-      const vendorOrder: any = { rating: 'desc' };
-      if (sortBy === 'newest') vendorOrder.createdAt = 'desc';
-      if (sortBy === 'bookings') vendorOrder.totalBookings = 'desc';
+      const vendorOrder: any = sortBy === 'newest' ? { createdAt: 'desc' }
+        : sortBy === 'bookings' ? { totalBookings: 'desc' } : { rating: 'desc' };
 
       const vendorTotal = await prisma.vendor.count({ where: vendorWhere });
       const vendors = await prisma.vendor.findMany({
@@ -100,10 +107,12 @@ export async function searchDiscovery(req: Request, res: Response) {
         };
       }
 
-      if (city) {
+      if (city || state || minRating !== undefined) {
         serviceWhere.vendor = {
           is: {
-            city: { contains: String(city), mode: 'insensitive' },
+            ...(city ? { city: { contains: String(city), mode: 'insensitive' } } : {}),
+            ...(state ? { state: { contains: String(state), mode: 'insensitive' } } : {}),
+            ...(minRating !== undefined ? { rating: { gte: Number(minRating) } } : {}),
           },
         };
       }
@@ -123,9 +132,8 @@ export async function searchDiscovery(req: Request, res: Response) {
         ];
       }
 
-      const serviceOrder: any = { createdAt: 'desc' };
-      if (sortBy === 'price-asc') serviceOrder.startingPrice = 'asc';
-      if (sortBy === 'price-desc') serviceOrder.startingPrice = 'desc';
+      const serviceOrder: any = sortBy === 'price-asc' ? { startingPrice: 'asc' }
+        : sortBy === 'price-desc' ? { startingPrice: 'desc' } : { createdAt: 'desc' };
 
       const serviceTotal = await prisma.service.count({ where: serviceWhere });
       const services = await prisma.service.findMany({
@@ -176,9 +184,8 @@ export async function searchDiscovery(req: Request, res: Response) {
         if (maxPriceVal !== undefined) productWhere.price.lte = maxPriceVal;
       }
 
-      const productOrder: any = { createdAt: 'desc' };
-      if (sortBy === 'price-asc') productOrder.price = 'asc';
-      if (sortBy === 'price-desc') productOrder.price = 'desc';
+      const productOrder: any = sortBy === 'price-asc' ? { price: 'asc' }
+        : sortBy === 'price-desc' ? { price: 'desc' } : { createdAt: 'desc' };
 
       const productTotal = await prisma.product.count({ where: productWhere });
       const products = await prisma.product.findMany({

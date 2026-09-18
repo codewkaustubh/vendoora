@@ -14,6 +14,27 @@ export function isDuplicateReview(review: { id: string } | null): boolean {
   return Boolean(review);
 }
 
+export function computeVendorRating(ratings: number[]): { rating: number; totalReviews: number } {
+  const totalReviews = ratings.length;
+  if (!totalReviews) return { rating: 0, totalReviews: 0 };
+  const average = ratings.reduce((sum, value) => sum + value, 0) / totalReviews;
+  return { rating: Number(average.toFixed(2)), totalReviews };
+}
+
+type VendorRatingStore = {
+  review: { findMany: (args: any) => Promise<Array<{ rating: number }>> };
+  vendor: { update: (args: any) => Promise<unknown> };
+};
+
+export async function syncVendorRating(db: VendorRatingStore, vendorId: string) {
+  const reviews = await db.review.findMany({ where: { vendorId }, select: { rating: true } });
+  const { rating, totalReviews } = computeVendorRating(reviews.map((review) => review.rating));
+  // No persisted reviews means the schema default rating stays untouched.
+  if (!totalReviews) return { rating: 0, totalReviews: 0 };
+  await db.vendor.update({ where: { id: vendorId }, data: { rating, totalReviews } });
+  return { rating, totalReviews };
+}
+
 const reviewInclude = {
   user: { select: { id: true, name: true } },
   vendor: { select: { id: true, businessName: true } },
@@ -33,9 +54,13 @@ export async function create(req: any, res: Response) {
     if (!canReviewOrder(order, req.user.id)) return res.status(403).json({ error: 'Only the customer can review their completed order' });
     if (isDuplicateReview(order.review)) return res.status(409).json({ error: 'This order has already been reviewed' });
 
-    const review = await prisma.review.create({
-      data: { orderId: order.id, userId: req.user.id, vendorId: order.booking.vendorId, rating: Number(rating), comment: comment ? String(comment) : undefined },
-      include: reviewInclude,
+    const review = await prisma.$transaction(async (tx) => {
+      const created = await tx.review.create({
+        data: { orderId: order.id, userId: req.user.id, vendorId: order.booking.vendorId, rating: Number(rating), comment: comment ? String(comment) : undefined },
+        include: reviewInclude,
+      });
+      await syncVendorRating(tx, order.booking.vendorId);
+      return created;
     });
     const vendor = await prisma.vendor.findUnique({ where: { id: order.booking.vendorId }, select: { userId: true } });
     if (vendor) await createNotification(vendor.userId, 'Review received', `A customer rated your completed booking ${rating}/5.`, 'review');

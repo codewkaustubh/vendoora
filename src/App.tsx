@@ -6,68 +6,106 @@
 import { useState, useEffect } from 'react';
 import VendooraLandingPage from './pages/VendooraLandingPage';
 import VendorCommandCenterPage from './pages/VendorCommandCenterPage';
+import AuthModal from './components/auth/AuthModal';
+import { ApiInventoryItem, ApiProduct, ApiReel, AuthUser } from './types';
 
-// Import initial data arrays to seed state
-import {
-  REELS,
-  INVENTORY,
-  PRODUCTS,
-  UPCOMING_EVENTS,
-} from './data/vendooraMockData';
-
-export interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  time: string;
-  type: 'inquiry' | 'payment' | 'system' | 'alert';
-  read: boolean;
-}
-
-const INITIAL_NOTIFICATIONS: Notification[] = [
-  {
-    id: 'n-1',
-    title: 'New Booking Inquiry',
-    message: 'Rajesh Mehta has requested a booking for Royal Palace Lawns, Mumbai on 2026-07-10.',
-    time: '2 mins ago',
-    type: 'inquiry',
-    read: false,
-  },
-  {
-    id: 'n-2',
-    title: 'Payout Disbursed',
-    message: 'Disbursement of ₹1,45,000 has been securely settled to your linked HDFC bank account.',
-    time: '2 hours ago',
-    type: 'payment',
-    read: true,
-  },
-  {
-    id: 'n-3',
-    title: 'Profile Verified',
-    message: 'Sharma Tent House profile has passed automatic GSTIN validation and verification checks.',
-    time: '1 day ago',
-    type: 'system',
-    read: true,
-  },
-  {
-    id: 'n-4',
-    title: 'Low Inventory Alert',
-    message: 'Premium White Royal Sofas is near-fully booked for upcoming peak dates (July 12-15).',
-    time: '2 days ago',
-    type: 'alert',
-    read: false,
-  }
-];
+import { apiRequest } from './lib/api';
 
 export default function App() {
   const [vendorMode, setVendorMode] = useState(false);
 
-  // Central Database / Shared State across Consumer & Vendor Mode
-  const [reels, setReels] = useState<any[]>(REELS);
-  const [inventory, setInventory] = useState<any[]>(INVENTORY);
-  const [products, setProducts] = useState<any[]>(PRODUCTS);
-  const [bookings, setBookings] = useState<any[]>(UPCOMING_EVENTS);
-  const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
+  // Authentication State
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
+  const [authModalRole, setAuthModalRole] = useState<'CLIENT' | 'VENDOR'>('CLIENT');
+
+  // Shared catalog state loaded from the API and used by both modes.
+  // Vendor bookings and notifications are owned by their pages (they fetch the
+  // authenticated endpoints directly), so they are not mirrored here.
+  const [reels, setReels] = useState<ApiReel[]>([]);
+  const [inventory, setInventory] = useState<ApiInventoryItem[]>([]);
+  const [products, setProducts] = useState<ApiProduct[]>([]);
+
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setInventory([]);
+    setDataLoading(true);
+    setDataError(null);
+    const load = async () => {
+      try {
+        const [reelData, productData] = await Promise.all([
+          apiRequest('/api/reels'), apiRequest('/api/marketplace/products?limit=100'),
+        ]);
+        if (!active) return;
+        setReels(reelData.reels || []);
+        setProducts(productData.products || []);
+        const session = currentUser?.role === 'VENDOR' ? await apiRequest('/api/auth/me') : null;
+        const vendorId = session?.user?.vendor?.id;
+        if (vendorId) {
+          const data = await apiRequest(`/api/vendors/${vendorId}`);
+          if (active) setInventory(data.vendor.inventory || []);
+        }
+      } catch (error) {
+        if (active) setDataError(error instanceof Error ? error.message : 'Unable to load marketplace');
+      } finally {
+        if (active) setDataLoading(false);
+      }
+    };
+    void load();
+    return () => { active = false; };
+  }, [currentUser?.id, vendorMode, refreshKey]);
+
+  useEffect(() => {
+    const expire = () => { setCurrentUser(null); setVendorMode(false); setAuthModalOpen(true); };
+    window.addEventListener('vendoora:session-expired', expire);
+    return () => window.removeEventListener('vendoora:session-expired', expire);
+  }, []);
+
+  // Restore authenticated session on startup
+  useEffect(() => {
+    let cancelled = false;
+    const restoreSession = async () => {
+      const token = localStorage.getItem('vendoora_token');
+      if (!token) {
+        setAuthLoading(false);
+        return;
+      }
+      try {
+        const response = await fetch('/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          if (!cancelled && payload?.user) {
+            setCurrentUser(payload.user);
+            // Steer to correct role view
+            if (payload.user.role === 'VENDOR') {
+              setVendorMode(true);
+            } else {
+              setVendorMode(false);
+            }
+          }
+        } else if (response.status === 401 || response.status === 403) {
+          localStorage.removeItem('vendoora_token');
+          if (!cancelled) setCurrentUser(null);
+        }
+      } catch (error) {
+        console.warn('Failed to restore session on startup:', error);
+      } finally {
+        if (!cancelled) setAuthLoading(false);
+      }
+    };
+    restoreSession();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Sync dark class on document element if needed, though pages maintain explicit base styling
   useEffect(() => {
@@ -80,85 +118,121 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [vendorMode]);
 
-  const handleAddReel = (newReel: any) => {
-    setReels((prev) => [newReel, ...prev]);
+  const handleAuthSuccess = (token: string, user: AuthUser) => {
+    localStorage.setItem('vendoora_token', token);
+    setCurrentUser(user);
+    setAuthModalOpen(false);
+    if (user.role === 'VENDOR') {
+      setVendorMode(true);
+    } else {
+      setVendorMode(false);
+    }
   };
 
-  const handleDeleteReel = (reelId: string) => {
-    setReels((prev) => prev.filter((r) => r.id !== reelId));
+  const handleLogout = () => {
+    localStorage.removeItem('vendoora_token');
+    setCurrentUser(null);
+    setVendorMode(false);
   };
 
-  const handleAddInventoryItem = (newItem: any) => {
-    setInventory((prev) => [...prev, newItem]);
+  const handleOpenAuth = (mode: 'login' | 'register' = 'login', role: 'CLIENT' | 'VENDOR' = 'CLIENT') => {
+    setAuthModalMode(mode);
+    setAuthModalRole(role);
+    setAuthModalOpen(true);
   };
 
-  const handleUpdateInventoryItemRates = (itemId: string, hourly: number, daily: number) => {
-    setInventory((prev) =>
-      prev.map((item) =>
-        item.id === itemId
-          ? { ...item, hourlyRate: hourly, dailyRate: daily }
-          : item
-      )
+  const handleSwitchToVendor = () => {
+    if (!currentUser) { handleOpenAuth('login', 'VENDOR'); return; }
+    if (currentUser && currentUser.role !== 'VENDOR') {
+      if (window.confirm('The Vendor Command Center is for registered service vendors. Would you like to create or sign in to a Vendor account?')) {
+        handleOpenAuth('register', 'VENDOR');
+      }
+      return;
+    }
+    setVendorMode(true);
+  };
+
+  const handleAddReel = async (newReel: any) => {
+    const { reel } = await apiRequest('/api/reels', { method: 'POST', body: JSON.stringify(newReel) });
+    setReels((prev) => [reel, ...prev]);
+  };
+
+  const handleDeleteReel = async (reelId: string) => {
+    try {
+      await apiRequest(`/api/reels/${reelId}`, { method: 'DELETE' });
+      setReels((prev) => prev.filter((r) => r.id !== reelId));
+    } catch (error) { setDataError(error instanceof Error ? error.message : 'Unable to delete reel'); }
+  };
+
+  const handleAddInventoryItem = async (newItem: any) => {
+    const { item } = await apiRequest('/api/inventory', { method: 'POST', body: JSON.stringify(newItem) });
+    setInventory((prev) => [...prev, item]);
+  };
+
+  const handleUpdateInventoryItemRates = async (itemId: string, hourly: number, daily: number) => {
+    try {
+      const { item } = await apiRequest(`/api/inventory/${itemId}/rates`, {
+        method: 'PUT', body: JSON.stringify({ hourlyRate: hourly, dailyRate: daily }),
+      });
+      setInventory((prev) => prev.map((entry) => entry.id === itemId ? item : entry));
+    } catch (error) { setDataError(error instanceof Error ? error.message : 'Unable to save rates'); }
+  };
+
+  const handleAddProduct = async (newProduct: any) => {
+    const { product } = await apiRequest('/api/marketplace/products', {
+      method: 'POST', body: JSON.stringify({ ...newProduct, condition: newProduct.condition.toUpperCase() }),
+    });
+    setProducts((prev) => [product, ...prev]);
+  };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center gap-3 font-sans">
+        <div className="w-10 h-10 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-xs uppercase tracking-widest text-zinc-400 font-bold">Restoring Vendoora Session…</p>
+      </div>
     );
-  };
-
-  const handleAddProduct = (newProduct: any) => {
-    setProducts((prev) => [newProduct, ...prev]);
-  };
-
-  const handleAddBooking = (newBooking: any) => {
-    setBookings((prev) => [newBooking, ...prev]);
-  };
-
-  const handleUpdateBookings = (newBookings: any[]) => {
-    setBookings(newBookings);
-  };
-
-  const handleAddNotification = (newNotification: any) => {
-    setNotifications((prev) => [newNotification, ...prev]);
-  };
-
-  const handleMarkNotificationRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
-  };
-
-  const handleMarkAllNotificationsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  };
+  }
 
   return (
     <div id="vendoora-app-root">
+      {dataLoading && <p role="status" className="p-3 text-center">Loading marketplace…</p>}
+      {dataError && <div role="alert" className="p-3 text-center text-red-500">{dataError} <button onClick={() => setRefreshKey((key) => key + 1)}>Retry</button></div>}
       {!vendorMode ? (
         <VendooraLandingPage
           id="consumer-landing"
-          onSwitchToVendor={() => setVendorMode(true)}
+          onSwitchToVendor={handleSwitchToVendor}
           reels={reels}
           products={products}
-          onAddNotification={handleAddNotification}
+          currentUser={currentUser}
+          onOpenAuth={handleOpenAuth}
+          onLogout={handleLogout}
         />
       ) : (
         <VendorCommandCenterPage
           id="vendor-dashboard"
           onBackToUserMode={() => setVendorMode(false)}
-          reels={reels}
+          reels={reels.filter((reel) => reel.vendorId === (currentUser?.vendor?.id || currentUser?.vendorId))}
           onAddReel={handleAddReel}
           onDeleteReel={handleDeleteReel}
           inventory={inventory}
           onAddInventoryItem={handleAddInventoryItem}
           onUpdateInventoryItemRates={handleUpdateInventoryItemRates}
-          products={products}
+          products={products.filter((product) => product.sellerId === currentUser?.id)}
           onAddProduct={handleAddProduct}
-          bookings={bookings}
-          onUpdateBookings={handleUpdateBookings}
-          onAddBooking={handleAddBooking}
-          notifications={notifications}
-          onAddNotification={handleAddNotification}
-          onMarkNotificationRead={handleMarkNotificationRead}
-          onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
+          currentUser={currentUser}
+          onOpenAuth={handleOpenAuth}
+          onLogout={handleLogout}
         />
       )}
+
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        initialMode={authModalMode}
+        initialRole={authModalRole}
+        onAuthSuccess={handleAuthSuccess}
+      />
     </div>
   );
 }
