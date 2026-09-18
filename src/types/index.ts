@@ -4,9 +4,8 @@
  */
 
 /**
- * Prototype/offline shapes. These back the static mock dataset
- * (`src/data/vendooraMockData.ts`) and the unrendered prototype components.
- * Live API-driven views use the `Api*` interfaces and `VendorCardModel` below.
+ * Prototype/offline shapes kept for reference. Live API-driven views use the
+ * `Api*` interfaces and `VendorCardModel` below.
  */
 export interface Category {
   id: string;
@@ -190,6 +189,16 @@ export interface ApiInventoryItem {
   hourlyRate: number;
   dailyRate: number;
   image: string;
+}
+
+/** `GET /api/categories` — Prisma `Category` rows returned verbatim. */
+export interface ApiCategory {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  icon?: string | null;
+  image?: string | null;
 }
 
 /**

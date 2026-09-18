@@ -3,11 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, ArrowRight, ArrowLeft, Check, Users, Sparkles } from 'lucide-react';
 import { BrandTokens } from '../vendoora/BrandTokens';
-import { CATEGORIES } from '../../data/vendooraMockData';
+import type { ApiCategory } from '../../types';
 import { calculateEventBudget } from './budgetCalculatorModel';
 import DonutChart from './DonutChart';
 
@@ -16,6 +16,45 @@ interface BudgetCalculatorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onBookClick?: (totalEstimate: string) => void;
+}
+
+export interface DisplayCategory {
+  id: string;
+  label: string;
+  iconName: string;
+  gradient: string;
+}
+
+const FALLBACK_ICON_NAME = 'LayoutGrid';
+
+const FALLBACK_GRADIENTS = [
+  'from-blue-500/10 to-indigo-500/10',
+  'from-amber-500/10 to-orange-500/10',
+  'from-pink-500/10 to-rose-500/10',
+  'from-emerald-500/10 to-teal-500/10',
+  'from-cyan-500/10 to-blue-500/10',
+  'from-purple-500/10 to-violet-500/10',
+  'from-yellow-500/10 to-amber-500/10',
+  'from-indigo-500/10 to-sky-500/10',
+];
+
+export function isValidApiCategory(category: any): category is ApiCategory {
+  return Boolean(category) &&
+    typeof category.id === 'string' && category.id.length > 0 &&
+    typeof category.name === 'string' && category.name.length > 0 &&
+    typeof category.slug === 'string' && category.slug.length > 0;
+}
+
+export function toDisplayCategories(rows: unknown): DisplayCategory[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .filter(isValidApiCategory)
+    .map((row, index) => ({
+      id: row.slug,
+      label: row.name,
+      iconName: typeof row.icon === 'string' && row.icon.length > 0 ? row.icon : FALLBACK_ICON_NAME,
+      gradient: FALLBACK_GRADIENTS[index % FALLBACK_GRADIENTS.length],
+    }));
 }
 
 export default function BudgetCalculatorModal({
@@ -27,10 +66,36 @@ export default function BudgetCalculatorModal({
   const [step, setStep] = useState(1);
   const [eventType, setEventType] = useState('Birthday/Private Party');
   const [guests, setGuests] = useState(150);
-  const [selectedServices, setSelectedServices] = useState<string[]>(['venues', 'catering', 'decor']);
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [qualityTier, setQualityTier] = useState<'Budget' | 'Standard' | 'Premium'>('Standard');
+  const [categories, setCategories] = useState<DisplayCategory[]>([]);
+  const [categoriesState, setCategoriesState] = useState<'idle' | 'loading' | 'error' | 'empty'>('idle');
 
-  const guestSliderRef = useRef<HTMLDivElement>(null);
+  const guestSliderRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    const loadCategories = async () => {
+      setCategoriesState('loading');
+      try {
+        const response = await fetch('/api/categories');
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload?.error || 'Unable to load service categories');
+        const options = toDisplayCategories(payload?.categories);
+        if (cancelled) return;
+        setCategories(options);
+        setCategoriesState(options.length ? 'idle' : 'empty');
+        setSelectedServices((current) => current.filter((id) => options.some((option) => option.id === id)));
+      } catch (error) {
+        if (cancelled) return;
+        setCategories([]);
+        setCategoriesState('error');
+      }
+    };
+    void loadCategories();
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -222,9 +287,22 @@ export default function BudgetCalculatorModal({
                 </div>
 
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[35vh] overflow-y-auto pr-1">
-                  {CATEGORIES.map((cat) => {
-                    const isSelected = selectedServices.includes(cat.id);
-                    return (
+                  {categoriesState === 'loading' ? (
+                    <p role="status" className="col-span-full text-center text-xs text-zinc-400 py-6">
+                      Loading service categories…
+                    </p>
+                  ) : categoriesState === 'error' ? (
+                    <p role="alert" className="col-span-full text-center text-xs text-red-400 py-6">
+                      Unable to load service categories. Please close and try again.
+                    </p>
+                  ) : categories.length === 0 ? (
+                    <p role="status" className="col-span-full text-center text-xs text-zinc-400 py-6">
+                      No service categories are available yet.
+                    </p>
+                  ) : (
+                    categories.map((cat) => {
+                      const isSelected = selectedServices.includes(cat.id);
+                      return (
                       <button
                         key={cat.id}
                         onClick={() => toggleService(cat.id)}
@@ -239,8 +317,9 @@ export default function BudgetCalculatorModal({
                           <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-ping" />
                         )}
                       </button>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </motion.div>
             )}

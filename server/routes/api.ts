@@ -10,6 +10,7 @@ import * as services from '../controllers/services';
 import * as media from '../controllers/media';
 import * as discovery from '../controllers/discovery';
 import * as availability from '../controllers/availability';
+import * as categories from '../controllers/categories';
 import * as payments from '../controllers/payments';
 import * as orders from '../controllers/orders';
 import * as reviews from '../controllers/reviews';
@@ -70,6 +71,9 @@ router.post('/reviews', authenticateJWT, requireRole(['CLIENT', 'ADMIN']), revie
 router.get('/reviews/client', authenticateJWT, requireRole(['CLIENT', 'ADMIN']), reviews.getMine);
 router.get('/reviews/vendor', authenticateJWT, requireRole(['VENDOR']), reviews.getVendorReviews);
 router.get('/reviews/vendor/:vendorId', reviews.getPublicVendorReviews);
+
+// --- CATEGORIES ---
+router.get('/categories', categories.getAll);
 
 // --- SERVICE DISCOVERY ---
 router.post('/services', authenticateJWT, requireRole(['VENDOR']), services.create);

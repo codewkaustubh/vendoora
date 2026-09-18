@@ -40,8 +40,6 @@ import BudgetCalculatorModal from '../components/budget/BudgetCalculatorModal';
 import VendorTermsModal from '../components/vendor/VendorTermsModal';
 import LegalModal from '../components/vendoora/LegalModal';
 
-// Category catalog is still static: no categories API exists yet.
-import { CATEGORIES } from '../data/vendooraMockData';
 
 import { ApiProduct, ApiReel, ApiService, ApiVendor, AuthUser } from '../types';
 import { toVendorCardModels } from '../lib/vendorModels';
@@ -302,7 +300,6 @@ export default function VendooraLandingPage({
   const navigationTabs = [
     { id: 'home', label: 'Home', icon: HomeIcon },
     { id: 'search', label: 'Search', icon: SearchIcon },
-    { id: 'categories', label: 'Categories', icon: GridIcon },
     { id: 'market', label: 'Market', icon: BagIcon },
     { id: 'packages', label: 'Packages', icon: GiftIcon },
     { id: 'bookings', label: 'Bookings', icon: ClipboardList },
@@ -526,7 +523,6 @@ export default function VendooraLandingPage({
     const elementIdMap: { [key: string]: string } = {
       home: 'vendoora-landing-page',
       search: 'search-section-root',
-      categories: 'categories-section-root',
       market: 'marketplace-section-root',
       packages: 'packages-section-root',
       bookings: 'customer-bookings-root',
@@ -605,49 +601,6 @@ export default function VendooraLandingPage({
         </section>
 
         {/* 3. Categories (Strict order item 3) */}
-        <section id="categories-section-root" className="w-full max-w-7xl mx-auto px-4 md:px-6 py-4">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="font-heading font-bold text-lg md:text-xl text-zinc-900">
-                Browse Categories
-              </h3>
-              <p className="text-zinc-500 text-xs mt-0.5">
-                Pick a professional specialty category to filter verified networks instantly
-              </p>
-            </div>
-            {selectedCategory && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSelectedCategory('')}
-                className="text-[#1E40AF] text-xs font-bold"
-              >
-                Reset Filter
-              </Button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {CATEGORIES.map((cat) => {
-              const isSelected = selectedCategory.toLowerCase() === cat.label.toLowerCase();
-              return (
-                <CategoryCard
-                  key={cat.id}
-                  category={cat}
-                  onClick={() => {
-                    if (isSelected) {
-                      setSelectedCategory('');
-                    } else {
-                      setSelectedCategory(cat.label);
-                      document.getElementById('recommended-vendors-root')?.scrollIntoView({ behavior: 'smooth' });
-                    }
-                  }}
-                  className={isSelected ? 'border-[#1E40AF] ring-2 ring-indigo-500/10 bg-[#1E40AF]/5' : ''}
-                />
-              );
-            })}
-          </div>
-        </section>
 
         {/* 4. Recommended Vendors (Strict order item 4) */}
         <section id="recommended-vendors-root" className="w-full max-w-7xl mx-auto px-4 md:px-6 py-4">
