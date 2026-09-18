@@ -1,0 +1,69 @@
+# VENDOORA — Render Blueprint
+#
+# Single-process architecture: one Node web service serves both the REST API
+# (/api/*) and the built SPA from dist/. Do NOT split this into separate
+# frontend/backend services.
+#
+# Deploy with:  render blueprint launch
+# Docs:         https://render.com/docs/blueprint-spec
+#
+# Every credential below is declared with sync: false, which creates a
+# placeholder that must be filled in from the Render dashboard (or the
+# `render secrets` CLI). No real key is ever stored in this file.
+
+services:
+  - type: web
+    name: vendoora-app
+    runtime: node
+    plan: starter
+    region: oregon
+
+    # Batch A made server.ts honor process.env.PORT, which Render injects.
+    # NODE_ENV=production switches server.ts from Vite middleware to static
+    # delivery of dist/index.html plus the JSON /api/* 404 handler.
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+
+      # Injected from the managed Postgres instance declared below.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: vendoora-postgres
+          property: connectionString
+
+      # --- Secret placeholders: set real values in the Render dashboard ---
+      - key: JWT_SECRET
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: APP_URL
+        sync: false
+
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+
+    # Apply pending migrations before the new process receives traffic.
+    preDeployCommand: npx prisma migrate deploy
+
+    healthCheckPath: /api/health
+    autoDeploy: true
+
+# Managed PostgreSQL instance rendered by this blueprint. Render injects the
+# connection string into the DATABASE_URL env var declared on the service.
+databases:
+  - name: vendoora-postgres
+    databaseName: vendoora
+    user: vendoora
+    plan: basic-256mb
+    postgresMajorVersion: "16"
+    ipAllowList: [] # internal-only; reachable only from services in this blueprint

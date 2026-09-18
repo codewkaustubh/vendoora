@@ -28,7 +28,11 @@ export const upload = multer({
   },
   fileFilter: (_req, file, cb) => {
     if (!ALLOWED_IMAGE_MIME_TYPES.includes(file.mimetype)) {
-      cb(new Error('Invalid file type. Only JPEG, PNG, WebP, and GIF images are allowed.'));
+      // The global error handler maps `status` to an HTTP response; multer
+      // filter failures bypass controllers entirely.
+      const error = new Error('Invalid file type. Only JPEG, PNG, WebP, and GIF images are allowed.') as Error & { status?: number };
+      error.status = 400;
+      cb(error);
       return;
     }
 

@@ -16,7 +16,9 @@ export interface BudgetResult {
 }
 
 // Pricing definitions for calculation (in INR ₹)
-const BASE_COSTS: Record<string, number> = {
+// Exported so the category seed can assert that every pricing key has a
+// matching `Category.slug` (see prisma/seed.ts).
+export const BASE_COSTS: Record<string, number> = {
   'venues': 50000,
   'catering': 350, // per guest
   'decor': 20000,
