@@ -1,6 +1,33 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/db';
 
+const VERIFICATION_STATUSES = ['PENDING', 'VERIFIED', 'REJECTED'] as const;
+
+type VerificationStatusValue = (typeof VERIFICATION_STATUSES)[number];
+
+/**
+ * Verification is an ADMIN-owned trust attribute. A VENDOR caller always keeps
+ * the stored value, so a client can never self-verify its own profile.
+ */
+export function resolveVerificationStatus(
+  current: VerificationStatusValue,
+  role: string,
+  requested: { verificationStatus?: unknown; verified?: unknown },
+): VerificationStatusValue {
+  if (role !== 'ADMIN') return current;
+
+  const explicit = requested.verificationStatus;
+  if (typeof explicit === 'string' && (VERIFICATION_STATUSES as readonly string[]).includes(explicit)) {
+    return explicit as VerificationStatusValue;
+  }
+
+  if (typeof requested.verified === 'boolean') {
+    return requested.verified ? 'VERIFIED' : 'REJECTED';
+  }
+
+  return current;
+}
+
 export async function getAll(req: Request, res: Response) {
   try {
     const { category, search, location, city, state, minRating, sortBy, page = '1', limit = '20' } = req.query;
@@ -171,8 +198,7 @@ export async function updateProfile(req: any, res: Response) {
     const resolvedOwnerName = ownerName ?? vendor.ownerName;
     const resolvedLogo = logo ?? image ?? vendor.logo;
     const resolvedCoverImage = coverImage ?? image ?? vendor.coverImage;
-    const resolvedVerificationStatus =
-      verificationStatus ?? (verified === undefined ? vendor.verificationStatus : verified ? 'VERIFIED' : 'REJECTED');
+    const resolvedVerificationStatus = resolveVerificationStatus(vendor.verificationStatus, req.user.role, { verificationStatus, verified });
 
     const updated = await prisma.vendor.update({
       where: { id: vendor.id },

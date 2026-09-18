@@ -117,6 +117,27 @@ export async function getAllProducts(req: Request, res: Response) {
   }
 }
 
+export async function getProductById(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+
+    const product = await prisma.product.findUnique({
+      where: { id },
+      include: {
+        seller: { select: { id: true, name: true, email: true, city: true, state: true } },
+      },
+    });
+
+    if (!product) {
+      return res.status(404).json({ error: 'Product listing not found' });
+    }
+
+    return res.status(200).json({ product });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Server error fetching marketplace product' });
+  }
+}
+
 export async function deleteProduct(req: any, res: Response) {
   try {
     const { id } = req.params;

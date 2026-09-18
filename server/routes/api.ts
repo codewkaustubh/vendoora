@@ -83,6 +83,7 @@ router.get('/services/:id', services.getById);
 // --- USED GEAR SECONDARY MARKETPLACE ---
 router.post('/marketplace/products', authenticateJWT, marketplace.listProduct);
 router.get('/marketplace/products', marketplace.getAllProducts);
+router.get('/marketplace/products/:id', marketplace.getProductById);
 router.delete('/marketplace/products/:id', authenticateJWT, marketplace.deleteProduct);
 
 // --- NOTIFICATIONS MANAGEMENT ---

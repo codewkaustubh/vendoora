@@ -22,6 +22,15 @@ export function canManageOrder(order: { booking: { vendor: { userId: string } } 
   return Boolean(order && order.booking.vendor.userId === userId);
 }
 
+/**
+ * A completed fulfillment order is the single source of truth for a finished
+ * event, so the linked booking must reach COMPLETED as well. Reviews require
+ * both `Order.status` and `Booking.status` to be COMPLETED.
+ */
+export function linkedBookingStatusForOrderStatus(next: OrderStatus): 'COMPLETED' | undefined {
+  return next === 'COMPLETED' ? 'COMPLETED' : undefined;
+}
+
 export function canCreateOrderForBooking(booking: { paymentStatus: string; payment: { status: string } | null } | null): boolean {
   return Boolean(booking && booking.paymentStatus === 'PAID' && booking.payment?.status === 'PAID');
 }
@@ -95,13 +104,22 @@ export async function updateStatus(req: any, res: Response) {
     if (!canTransitionOrderStatus(order.status, nextStatus)) return res.status(409).json({ error: `Invalid order transition from ${order.status} to ${nextStatus}` });
     if (order.status === nextStatus) return res.status(200).json({ order });
 
-    const updated = await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        status: nextStatus,
-        ...(req.body.notes !== undefined ? { notes: String(req.body.notes) } : {}),
-        ...(req.body.trackingReference !== undefined ? { trackingReference: String(req.body.trackingReference) } : {}),
-      },
+    const updated = await prisma.$transaction(async (tx) => {
+      const savedOrder = await tx.order.update({
+        where: { id: order.id },
+        data: {
+          status: nextStatus,
+          ...(req.body.notes !== undefined ? { notes: String(req.body.notes) } : {}),
+          ...(req.body.trackingReference !== undefined ? { trackingReference: String(req.body.trackingReference) } : {}),
+        },
+      });
+
+      const linkedBookingStatus = linkedBookingStatusForOrderStatus(nextStatus);
+      if (linkedBookingStatus) {
+        await tx.booking.update({ where: { id: order.bookingId }, data: { status: linkedBookingStatus } });
+      }
+
+      return savedOrder;
     });
     await createNotification(order.booking.client.id, 'Order status updated', `Your order for "${order.booking.eventName}" is now ${nextStatus}.`, 'order');
     return res.status(200).json({ order: updated });

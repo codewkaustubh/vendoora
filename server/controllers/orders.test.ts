@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Prisma } from '@prisma/client';
-import { canCreateOrderForBooking, canManageOrder, canTransitionOrderStatus, ensureOrderForPaidBooking } from './orders';
+import { canCreateOrderForBooking, canManageOrder, canTransitionOrderStatus, ensureOrderForPaidBooking, linkedBookingStatusForOrderStatus } from './orders';
 
 test('creates orders only for paid booking and payment states', () => {
   assert.equal(canCreateOrderForBooking({ paymentStatus: 'PAID', payment: { status: 'PAID' } }), true);
@@ -56,4 +56,13 @@ test('creates a confirmed order from the paid booking logistics fields', async (
   assert.equal(createdData.bookingId, 'booking-1');
   assert.equal(createdData.venueAddress, 'Venue A');
   assert.equal(createdData.notes, 'Stage setup');
+});
+
+test('completing an order also completes the linked booking so reviews can be created', () => {
+  assert.equal(linkedBookingStatusForOrderStatus('COMPLETED'), 'COMPLETED');
+  assert.equal(linkedBookingStatusForOrderStatus('CONFIRMED'), undefined);
+  assert.equal(linkedBookingStatusForOrderStatus('PREPARING'), undefined);
+  assert.equal(linkedBookingStatusForOrderStatus('READY'), undefined);
+  assert.equal(linkedBookingStatusForOrderStatus('IN_PROGRESS'), undefined);
+  assert.equal(linkedBookingStatusForOrderStatus('CANCELLED'), undefined);
 });

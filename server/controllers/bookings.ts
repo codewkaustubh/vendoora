@@ -10,6 +10,22 @@ export function buildBookingInquiryMessage(clientName: string, eventName: string
   return `${clientName} requested services for "${eventName}" on ${day} at ${startTime}.`;
 }
 
+/** Server-side guard: booking amounts must be finite and never negative. */
+export function parseNonNegativeAmount(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') return 0;
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount < 0) return null;
+  return amount;
+}
+
+/** `null` signals an invalid payload; `undefined` means the caller omitted it. */
+export function parseGuestCount(value: unknown): number | null | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const count = Number(value);
+  if (!Number.isFinite(count) || count < 0 || !Number.isInteger(count)) return null;
+  return count;
+}
+
 export async function create(req: any, res: Response) {
   try {
     const {
@@ -58,6 +74,16 @@ export async function create(req: any, res: Response) {
       return res.status(400).json({ error: 'Invalid booking date' });
     }
 
+    const parsedTotalPrice = parseNonNegativeAmount(totalPrice);
+    if (parsedTotalPrice === null) {
+      return res.status(400).json({ error: 'totalPrice must be a non-negative number' });
+    }
+
+    const parsedGuestCount = parseGuestCount(guestCount);
+    if (parsedGuestCount === null) {
+      return res.status(400).json({ error: 'guestCount must be a non-negative whole number' });
+    }
+
     const booking = await prisma.$transaction(async (tx) => {
       const conflict = await checkBookingConflict(
         tx,
@@ -78,9 +104,9 @@ export async function create(req: any, res: Response) {
           startTime: String(bookingStartTime),
           endTime: endTime ? String(endTime) : undefined,
           venue: String(bookingVenue),
-          guestCount: guestCount !== undefined ? Number(guestCount) : undefined,
+          guestCount: parsedGuestCount,
           specialRequest: specialRequest ? String(specialRequest) : undefined,
-          totalPrice: Number(totalPrice ?? 0),
+          totalPrice: parsedTotalPrice,
           bookingOtp: bookingOtp ? String(bookingOtp) : undefined,
           otpVerified: otpVerified === true,
           status: 'PENDING',
