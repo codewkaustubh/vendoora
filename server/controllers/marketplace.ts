@@ -3,6 +3,11 @@ import { prisma } from '../config/db';
 
 export async function listProduct(req: any, res: Response) {
   try {
+    // Defensive: reject any client-supplied owner or trust fields.
+    if (req.body.sellerId !== undefined || req.body.isVerified !== undefined || req.body.status !== undefined) {
+      return res.status(400).json({ error: 'sellerId, isVerified, and status must not be supplied by the client.' });
+    }
+
     const { name, description, price, aiSuggestedPrice, condition, location, image, available } = req.body;
 
     if (!name || price === undefined || !condition || !location) {

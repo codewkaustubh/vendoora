@@ -15,13 +15,13 @@ test('booking inquiry notification stays readable for an unparseable date', () =
   );
 });
 
-test('accepts only finite non-negative booking amounts', () => {
+test('accepts only booking amounts of at least 1', () => {
   assert.equal(parseNonNegativeAmount(undefined), 0);
   assert.equal(parseNonNegativeAmount(null), 0);
   assert.equal(parseNonNegativeAmount(''), 0);
   assert.equal(parseNonNegativeAmount('45000'), 45000);
   assert.equal(parseNonNegativeAmount(1200.5), 1200.5);
-  assert.equal(parseNonNegativeAmount(0), 0);
+  assert.equal(parseNonNegativeAmount(0), null, '0 is below the 1 minimum');
   assert.equal(parseNonNegativeAmount(-1), null);
   assert.equal(parseNonNegativeAmount('abc'), null);
   assert.equal(parseNonNegativeAmount(Number.POSITIVE_INFINITY), null);
@@ -29,12 +29,12 @@ test('accepts only finite non-negative booking amounts', () => {
   assert.equal(parseNonNegativeAmount({ amount: 10 }), null);
 });
 
-test('accepts only whole non-negative guest counts', () => {
+test('accepts only guest counts of at least 1', () => {
   assert.equal(parseGuestCount(undefined), undefined);
   assert.equal(parseGuestCount(null), undefined);
   assert.equal(parseGuestCount(''), undefined);
   assert.equal(parseGuestCount('150'), 150);
-  assert.equal(parseGuestCount(0), 0);
+  assert.equal(parseGuestCount(0), null, '0 is below the 1 minimum');
   assert.equal(parseGuestCount(-5), null);
   assert.equal(parseGuestCount(12.5), null);
   assert.equal(parseGuestCount('many'), null);

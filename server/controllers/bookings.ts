@@ -14,7 +14,8 @@ export function buildBookingInquiryMessage(clientName: string, eventName: string
 export function parseNonNegativeAmount(value: unknown): number | null {
   if (value === undefined || value === null || value === '') return 0;
   const amount = Number(value);
-  if (!Number.isFinite(amount) || amount < 0) return null;
+  // Require at least 1 (e.g. INR 1) for booking amounts; 0 is not a payable amount.
+  if (!Number.isFinite(amount) || amount < 1) return null;
   return amount;
 }
 
@@ -22,7 +23,8 @@ export function parseNonNegativeAmount(value: unknown): number | null {
 export function parseGuestCount(value: unknown): number | null | undefined {
   if (value === undefined || value === null || value === '') return undefined;
   const count = Number(value);
-  if (!Number.isFinite(count) || count < 0 || !Number.isInteger(count)) return null;
+  // Require at least 1 guest for a booking; 0 is not a valid guest count.
+  if (!Number.isFinite(count) || count < 1 || !Number.isInteger(count)) return null;
   return count;
 }
 
