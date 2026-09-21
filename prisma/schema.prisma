@@ -94,12 +94,32 @@ model Category {
   icon        String?
   image       String?
 
+  // Two-level taxonomy: subcategories carry `parentId` pointing at their
+  // top-level category row. Top-level rows (and the internal system
+  // categories below) have `parentId = null`.
+  parentId String?
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children Category[] @relation("CategoryHierarchy")
+
+  // Curated customer taxonomy rows are created by `prisma/seed.ts` with
+  // explicit sort orders. The internal "General" fallback category has
+  // `sortOrder = 0` so it always renders after (and hidden from) the
+  // customer-facing grid.
+  sortOrder Int @default(0)
+
+  // TRUE only for internal rows that must never appear in the
+  // customer-facing taxonomy (`GET /api/categories?tree=true` filters them
+  // out). Today this is the "General" fallback that `services.create`
+  // resolves when a vendor omits a category.
+  isSystem Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   services Service[]
 
   @@index([name])
+  @@index([parentId])
 }
 
 model Service {

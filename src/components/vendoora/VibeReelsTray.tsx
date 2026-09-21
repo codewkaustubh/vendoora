@@ -41,8 +41,10 @@ export default function VibeReelsTray({ id, onReelClick, reels }: VibeReelsTrayP
       </div>
 
       {activeReels.length === 0 ? (
-        <div className="w-full text-center py-10 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
-          <p className="text-zinc-500 dark:text-zinc-400 text-xs font-medium">
+        /* Empty state keeps the exact geometry of the populated tray
+           (h-44 sm:h-52 cards + pb-3) so the page never collapses. */
+        <div className="w-full h-44 sm:h-52 mb-3 flex items-center justify-center text-center rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800">
+          <p className="px-4 text-zinc-500 dark:text-zinc-400 text-xs font-medium">
             No Vibe Reels have been published yet. Vendors can publish one from the Command Center.
           </p>
         </div>

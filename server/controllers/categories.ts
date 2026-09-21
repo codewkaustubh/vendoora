@@ -17,6 +17,11 @@ export interface CategoryOption {
   gradient: string;
 }
 
+export interface CategoryTreeNode extends CategoryRow {
+  sortOrder: number;
+  subcategories: CategoryRow[];
+}
+
 const FALLBACK_ICON_NAME = 'LayoutGrid';
 
 const FALLBACK_GRADIENTS = [
@@ -49,8 +54,46 @@ export function toCategoryOptions(rows: unknown): CategoryOption[] {
     }));
 }
 
+function toCategoryRow(row: any): CategoryRow {
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    description: row.description ?? null,
+    icon: row.icon ?? null,
+    image: row.image ?? null,
+  };
+}
+
+export function toCategoryTreeNode(row: any): CategoryTreeNode {
+  const children = Array.isArray(row?.children) ? row.children.filter(isValidCategoryRow) : [];
+  return {
+    ...toCategoryRow(row),
+    sortOrder: typeof row?.sortOrder === 'number' ? row.sortOrder : 0,
+    subcategories: children.map(toCategoryRow),
+  };
+}
+
 export async function getAll(req: Request, res: Response) {
   try {
+    const treeRequested = String(req.query.tree ?? '').toLowerCase() === 'true';
+
+    if (treeRequested) {
+      const categories = await prisma.category.findMany({
+        where: { parentId: null, isSystem: false },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        include: {
+          children: {
+            orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+          },
+        },
+      });
+
+      return res.status(200).json({
+        categories: categories.map(toCategoryTreeNode),
+      });
+    }
+
     const categories = await prisma.category.findMany({
       orderBy: { name: 'asc' },
     });

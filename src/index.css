@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+/*
+ * VENDOORA owns its colour scheme explicitly: `App.tsx` adds/removes the
+ * `.dark` class on <html> when Vendor Mode is entered or left.
+ *
+ * Tailwind v4 compiles `dark:` against `prefers-color-scheme` by default, which
+ * meant the customer experience silently followed the visitor's operating
+ * system theme and rendered a mixed page (dark chrome/inputs/cards on a light
+ * body) on any dark-mode machine. Declaring the variant against the `.dark`
+ * class makes the palette deterministic and honours the switch App.tsx already
+ * performs.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   /* Set fonts */
   --font-sans: "Poppins", system-ui, -apple-system, sans-serif;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isValidCategoryRow, toCategoryOptions } from './categories';
+import { isValidCategoryRow, toCategoryOptions, toCategoryTreeNode } from './categories';
 import { prisma } from '../config/db';
 import express from 'express';
 import { once } from 'node:events';
@@ -49,6 +49,75 @@ test('rejects non-array payloads without throwing', () => {
   assert.deepEqual(toCategoryOptions({}), []);
   assert.deepEqual(toCategoryOptions('venues'), []);
 });
+test('toCategoryTreeNode maps a parent row with its subcategories', () => {
+  const node = toCategoryTreeNode({
+    id: 'parent-id',
+    name: 'Venues',
+    slug: 'venues',
+    description: 'Venues',
+    icon: 'MapPinHouse',
+    image: null,
+    sortOrder: 1,
+    children: [
+      { id: 'child-1', name: 'Banquet Halls', slug: 'banquet-halls', icon: 'Landmark', sortOrder: 1 },
+      { id: 'bad', name: '', slug: '' },
+      { id: 'child-2', name: 'Lawns', slug: 'lawns', icon: null, image: null, sortOrder: 2 },
+    ],
+  });
+
+  assert.equal(node.sortOrder, 1);
+  assert.equal(node.subcategories.length, 2);
+  assert.deepEqual(node.subcategories[0], {
+    id: 'child-1',
+    name: 'Banquet Halls',
+    slug: 'banquet-halls',
+    description: null,
+    icon: 'Landmark',
+    image: null,
+  });
+});
+
+test('GET /api/categories?tree=true returns curated parents, never system rows', async () => {
+  const originalFindMany = prisma.category.findMany;
+  const calls: any[] = [];
+  prisma.category.findMany = (async (args: any) => {
+    calls.push(args);
+    return [
+      {
+        id: 'parent-id',
+        name: 'Venues',
+        slug: 'venues',
+        description: 'Venues',
+        icon: 'MapPinHouse',
+        image: null,
+        sortOrder: 1,
+        children: [
+          { id: 'child-1', name: 'Banquet Halls', slug: 'banquet-halls', icon: 'Landmark', sortOrder: 1 },
+        ],
+      },
+    ];
+  }) as unknown as typeof originalFindMany;
+
+  const app = express();
+  app.use('/api', apiRouter);
+  const server = app.listen(0, '127.0.0.1');
+  try {
+    await once(server, 'listening');
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/categories?tree=true`;
+    const response = await fetch(url);
+    assert.equal(response.status, 200);
+    assert.deepEqual(calls[0].where, { parentId: null, isSystem: false });
+    const payload = await response.json();
+    assert.equal(payload.categories.length, 1);
+    assert.equal(payload.categories[0].slug, 'venues');
+    assert.deepEqual(payload.categories[0].subcategories.map((row: any) => row.slug), ['banquet-halls']);
+    assert.ok(!payload.categories.some((row: any) => row.slug === 'general'));
+  } finally {
+    prisma.category.findMany = originalFindMany;
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
 
 test('GET /api/categories returns rows ordered by name', async () => {
   const originalFindMany = prisma.category.findMany;

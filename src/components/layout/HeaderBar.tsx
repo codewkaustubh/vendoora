@@ -111,19 +111,22 @@ export default function HeaderBar({
               </motion.button>
             </div>
           ) : (
+            /* Circular account button, matching the customer reference chrome. */
             <motion.button
               id="account-login-btn"
+              type="button"
               onClick={onLoginClick || onAccountClick}
+              aria-label="Sign in or create an account"
+              title="Sign in or create an account"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className={`px-3 py-1.5 rounded-full border flex items-center gap-1.5 text-xs font-semibold transition-all ${
+              className={`p-2 rounded-full border flex items-center justify-center transition-all ${
                 vendorMode
                   ? 'border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:text-[#6366F1]'
-                  : 'border-zinc-200/80 bg-white/70 text-zinc-700 hover:text-[#1E40AF] shadow-sm'
+                  : 'border-zinc-200/60 bg-white/60 text-zinc-700 hover:text-[#1E40AF]'
               }`}
             >
-              <User className="w-3.5 h-3.5" />
-              <span>Sign In</span>
+              <User className="w-4 h-4" />
             </motion.button>
           )}
         </div>

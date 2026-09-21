@@ -22,11 +22,15 @@ export default function MarketplaceSection({ id, products }: MarketplaceSectionP
       subtitle="Purchase certified, high-grade used event gear directly from trusted vendor networks"
     >
       {activeProducts.length === 0 ? (
-        <div className="w-full text-center py-12 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-[32px] bg-white/30 dark:bg-zinc-900/10">
-          <p className="text-zinc-500 dark:text-zinc-400 text-sm font-medium">
-            No pre-owned equipment has been listed yet. Vendors can publish gear from the Command Center.
-          </p>
-        </div>
+        /* Empty state keeps the exact geometry of the populated scroller
+           (w-64 card row + pb-4) so the section never collapses. */
+        <HorizontalScroller id="marketplace-scroller">
+          <div className="w-full min-h-[17.5rem] flex items-center justify-center text-center rounded-[32px] border border-dashed border-zinc-200 dark:border-zinc-800 bg-white/30 dark:bg-zinc-900/10">
+            <p className="px-4 text-zinc-500 dark:text-zinc-400 text-sm font-medium">
+              No pre-owned equipment has been listed yet. Vendors can publish gear from the Command Center.
+            </p>
+          </div>
+        </HorizontalScroller>
       ) : (
         <HorizontalScroller id="marketplace-scroller">
           {activeProducts.map((prod) => (

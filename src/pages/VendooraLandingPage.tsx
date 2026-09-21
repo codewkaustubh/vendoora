@@ -20,7 +20,6 @@ import {
 import {
   DesignTokens,
   Button,
-  SearchBar,
   CategoryCard,
   VendorCard as DSVendorCard,
   Badge,
@@ -40,9 +39,31 @@ import BudgetCalculatorModal from '../components/budget/BudgetCalculatorModal';
 import VendorTermsModal from '../components/vendor/VendorTermsModal';
 import LegalModal from '../components/vendoora/LegalModal';
 
+// Customer-side Browse Categories UI definitions (labels / icons / pastel tints only).
+// The taxonomy itself is the server/database authority
+// (`GET /api/categories?tree=true` seeded from `prisma/seed.ts`); these per-slug
+// presentation tokens only drive the approved card visuals. No vendors,
+// products, prices, availability, reels or inventory live here.
+// Cards that the API has not returned yet fall back to entry 0.
+const CATEGORY_PRESENTATION: Record<string, { iconName: string; gradient: string }> = {
+  venues: { iconName: 'MapPinHouse', gradient: 'from-blue-500/10 to-indigo-500/10' },
+  catering: { iconName: 'UtensilsCrossed', gradient: 'from-amber-500/10 to-orange-500/10' },
+  decor: { iconName: 'Sparkles', gradient: 'from-pink-500/10 to-rose-500/10' },
+  'tent-house': { iconName: 'Tent', gradient: 'from-emerald-500/10 to-teal-500/10' },
+  cooling: { iconName: 'Snowflake', gradient: 'from-cyan-500/10 to-blue-500/10' },
+  'sound-dj': { iconName: 'Music', gradient: 'from-purple-500/10 to-violet-500/10' },
+  lighting: { iconName: 'Lightbulb', gradient: 'from-yellow-500/10 to-amber-500/10' },
+  manpower: { iconName: 'Users', gradient: 'from-indigo-500/10 to-sky-500/10' },
+  'photo-video': { iconName: 'Camera', gradient: 'from-violet-500/10 to-fuchsia-500/10' },
+  mehendi: { iconName: 'Palette', gradient: 'from-orange-500/10 to-red-500/10' },
+  disposables: { iconName: 'Flame', gradient: 'from-slate-500/10 to-zinc-500/10' },
+  transport: { iconName: 'Truck', gradient: 'from-teal-500/10 to-green-500/10' },
+};
 
-import { ApiProduct, ApiReel, ApiService, ApiVendor, AuthUser } from '../types';
+
+import { ApiCategory, ApiProduct, ApiReel, ApiService, ApiVendor, AuthUser, Category } from '../types';
 import { toVendorCardModels } from '../lib/vendorModels';
+import CategoryDiscoveryPage from './CategoryDiscoveryPage';
 
 interface VendooraLandingPageProps {
   id?: string;
@@ -123,6 +144,10 @@ export default function VendooraLandingPage({
   onLogout,
 }: VendooraLandingPageProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [categoryTree, setCategoryTree] = useState<ApiCategory[]>([]);
+  const [categoryTreeState, setCategoryTreeState] = useState<'loading' | 'error' | 'ready'>('loading');
+  const [categoryTreeError, setCategoryTreeError] = useState<string | null>(null);
+  const [activeCategorySlug, setActiveCategorySlug] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedLocation, setSelectedLocation] = useState<string>('Mumbai, MH');
   const [activeTab, setActiveTab] = useState('home');
@@ -189,6 +214,45 @@ export default function VendooraLandingPage({
     };
     loadCatalog();
   }, []);
+
+  // Authoritative Browse Categories taxonomy: names, slugs, icons and
+  // subcategories come from the database via `GET /api/categories?tree=true`.
+  // Nothing is hardcoded here beyond per-slug presentation tokens.
+  useEffect(() => {
+    let cancelled = false;
+    const loadCategoryTree = async () => {
+      setCategoryTreeState('loading');
+      setCategoryTreeError(null);
+      try {
+        const response = await fetch('/api/categories?tree=true');
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload?.error || 'Unable to load categories');
+        if (cancelled) return;
+        setCategoryTree(Array.isArray(payload?.categories) ? payload.categories : []);
+        setCategoryTreeState('ready');
+      } catch (error) {
+        if (cancelled) return;
+        setCategoryTree([]);
+        setCategoryTreeError(error instanceof Error ? error.message : 'Unable to load categories');
+        setCategoryTreeState('error');
+      }
+    };
+    void loadCategoryTree();
+    return () => { cancelled = true; };
+  }, []);
+
+  const categoryCards: Category[] = categoryTree.map((row) => {
+    const presentation = CATEGORY_PRESENTATION[row.slug] ?? CATEGORY_PRESENTATION.venues;
+    return {
+      id: row.slug,
+      label: row.name,
+      iconName: row.icon && row.icon.length > 0 ? row.icon : presentation.iconName,
+      gradient: presentation.gradient,
+    };
+  });
+  const activeCategory = activeCategorySlug
+    ? categoryTree.find((row) => row.slug === activeCategorySlug) ?? null
+    : null;
 
   const loadCustomerBookings = async () => {
     const token = localStorage.getItem('vendoora_token');
@@ -300,6 +364,7 @@ export default function VendooraLandingPage({
   const navigationTabs = [
     { id: 'home', label: 'Home', icon: HomeIcon },
     { id: 'search', label: 'Search', icon: SearchIcon },
+    { id: 'categories', label: 'Categories', icon: GridIcon },
     { id: 'market', label: 'Market', icon: BagIcon },
     { id: 'packages', label: 'Packages', icon: GiftIcon },
     { id: 'bookings', label: 'Bookings', icon: ClipboardList },
@@ -520,9 +585,11 @@ export default function VendooraLandingPage({
   // Smooth scroll handler for Bottom Navigation mobile interactions
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId);
+    if (tabId !== 'categories') setActiveCategorySlug(null);
     const elementIdMap: { [key: string]: string } = {
       home: 'vendoora-landing-page',
       search: 'search-section-root',
+      categories: 'categories-section-root',
       market: 'marketplace-section-root',
       packages: 'packages-section-root',
       bookings: 'customer-bookings-root',
@@ -577,30 +644,96 @@ export default function VendooraLandingPage({
       {/* Main Content Sections Flow */}
       <main className="flex-1 space-y-12 pb-16 md:pb-24">
         
-        {/* 2. Search Section (Strict order item 2) */}
-        <section id="search-section-root" className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-6">
-          <div className="relative overflow-hidden rounded-[32px] border border-zinc-200/50 bg-white/70 p-6 md:p-8 shadow-sm backdrop-blur-md">
-            <div className="absolute top-0 right-0 w-72 h-72 bg-indigo-500/5 rounded-full blur-[80px] pointer-events-none" />
-            <div className="max-w-2xl space-y-4">
-              <h2 className="font-heading font-bold text-xl md:text-2xl text-zinc-900 tracking-tight">
-                Fast Vendor Discovery
-              </h2>
-              <p className="text-zinc-500 text-xs md:text-sm">
-                Real-time distance metrics, verified contractor status, and fully transparent market quotes across {selectedLocation}.
+        {/* 2. Categories (search is owned by the global header) */}
+        <section id="categories-section-root" className="w-full max-w-7xl mx-auto px-4 md:px-6 py-4">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="font-heading font-bold text-lg md:text-xl text-zinc-900">
+                Browse Categories
+              </h3>
+              <p className="text-zinc-500 text-xs mt-0.5">
+                Pick a professional specialty category to filter verified networks instantly
               </p>
-              <div className="pt-2">
-                <SearchBar
-                  id="home-standalone-search"
-                  value={searchQuery}
-                  onChange={setSearchQuery}
-                  placeholder="Search venues, decorators, catering, sound equipment..."
-                />
-              </div>
             </div>
+            {selectedCategory && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedCategory('')}
+                className="text-[#1E40AF] text-xs font-bold"
+              >
+                Reset Filter
+              </Button>
+            )}
           </div>
+
+          {/* Approved twelve-specialty UI grid (6 columns desktop, 2 rows).
+              Cards render from the database taxonomy; loading keeps the same
+              geometry with shimmer tiles instead of fake data. */}
+          {categoryTreeState === 'loading' ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4" aria-hidden="true">
+              {Array.from({ length: 12 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="flex flex-col items-center justify-between p-6 rounded-[32px] border border-zinc-200/50 bg-white/40 animate-pulse"
+                >
+                  <div className="w-16 h-16 mb-4 rounded-2xl bg-zinc-200/70" />
+                  <div className="w-16 h-3 mb-4 rounded bg-zinc-200/70" />
+                  <div className="w-14 h-6 rounded-full bg-zinc-200/70" />
+                </div>
+              ))}
+            </div>
+          ) : categoryTreeState === 'error' ? (
+            <div className="w-full text-center py-10 border border-dashed border-red-200 rounded-[32px] bg-red-50/40">
+              <p className="text-red-500 text-sm font-medium flex items-center justify-center gap-2">
+                <AlertCircle className="w-5 h-5" />
+                {categoryTreeError || 'Unable to load categories'}
+              </p>
+            </div>
+          ) : categoryCards.length === 0 ? (
+            <div className="w-full text-center py-10 border border-dashed border-zinc-200 rounded-[32px] bg-white/30">
+              <p className="text-zinc-500 text-sm font-medium">
+                No service categories are available yet.
+              </p>
+            </div>
+          ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {categoryCards.map((cat) => {
+              const isSelected = selectedCategory.toLowerCase() === cat.label.toLowerCase();
+              return (
+                <CategoryCard
+                  key={cat.id}
+                  category={cat}
+                  onClick={() => {
+                    if (isSelected) {
+                      setSelectedCategory('');
+                    } else {
+                      setSelectedCategory(cat.label);
+                      setActiveCategorySlug(cat.id);
+                      document.getElementById('category-discovery-page')?.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }}
+                  className={isSelected ? 'border-[#1E40AF] ring-2 ring-indigo-500/10 bg-[#1E40AF]/5' : ''}
+                />
+              );
+            })}
+          </div>
+          )}
         </section>
 
-        {/* 3. Categories (Strict order item 3) */}
+        {/* 3. Category listings page: real backend results for the open category. */}
+        {activeCategory && (
+          <CategoryDiscoveryPage
+            id="category-discovery-page"
+            category={activeCategory}
+            location={selectedLocation}
+            onBack={() => {
+              setActiveCategorySlug(null);
+              document.getElementById('categories-section-root')?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            onSelectService={openServiceBooking}
+          />
+        )}
 
         {/* 4. Recommended Vendors (Strict order item 4) */}
         <section id="recommended-vendors-root" className="w-full max-w-7xl mx-auto px-4 md:px-6 py-4">

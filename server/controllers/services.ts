@@ -31,17 +31,41 @@ export async function create(req: any, res: Response) {
     let resolvedCategoryId = categoryId as string | undefined;
 
     if (!resolvedCategoryId && category) {
+      // Stable identifier first: vendors and the customer UI pass Category.id
+      // (uuid) or Category.slug. The legacy display-name path is kept only so
+      // pre-existing integrations keep working; slugs are the contract.
       const categoryRecord = await prisma.category.findFirst({
         where: {
-          name: {
-            equals: String(category),
-            mode: 'insensitive',
-          },
+          OR: [
+            { id: String(category) },
+            { slug: { equals: String(category), mode: 'insensitive' } },
+            { name: { equals: String(category), mode: 'insensitive' } },
+          ],
         },
+        select: { id: true, parentId: true, slug: true },
       });
 
       if (categoryRecord) {
         resolvedCategoryId = categoryRecord.id;
+      }
+    }
+
+    if (resolvedCategoryId) {
+      const resolvedRecord = await prisma.category.findUnique({
+        where: { id: resolvedCategoryId },
+        select: { id: true, parentId: true, slug: true, isSystem: true },
+      });
+
+      if (!resolvedRecord) {
+        return res.status(400).json({ error: 'Unknown category for this service' });
+      }
+
+      // A service may only be listed under a real taxonomy node or a
+      // subcategory of one. Listing directly under the internal "General"
+      // fallback is rejected so the fallback keeps its existing role:
+      // only the legacy no-category path may resolve to it.
+      if (resolvedRecord.isSystem) {
+        return res.status(400).json({ error: 'Services must be listed under a real category or subcategory' });
       }
     }
 
@@ -90,23 +114,68 @@ export async function create(req: any, res: Response) {
 
 export async function getAll(req: Request, res: Response) {
   try {
-    const { search, category, location, city, minPrice, maxPrice, isAvailable, sortBy, page = '1', limit = '20' } = req.query;
+    const { search, category, subcategory, location, city, minPrice, maxPrice, isAvailable, sortBy, page = '1', limit = '20' } = req.query;
 
     const whereClause: any = { isAvailable: isAvailable !== 'false' };
     const pageNum = Math.max(1, parseInt(String(page)) || 1);
     const pageSize = Math.min(100, Math.max(1, parseInt(String(limit)) || 20));
     const skip = (pageNum - 1) * pageSize;
 
-    // Category filter
+    // Category filter: resolves the client's identifier (slug or name) against
+    // the real Category rows first — client strings are never trusted as
+    // filters. Stable slugs are the contract: display names may change later
+    // without breaking routes, links, filters, or existing records.
+    // "All [Category]" matches services tagged with the parent row itself OR
+    // any of its subcategory rows, in the existing single-link hierarchy
+    // (service.category -> taxonomy node).
     if (category) {
+      const parent = await prisma.category.findFirst({
+        where: {
+          OR: [
+            { id: String(category) },
+            { slug: { equals: String(category), mode: 'insensitive' } },
+            { name: { equals: String(category), mode: 'insensitive' } },
+          ],
+        },
+        include: { children: { select: { id: true } } },
+      });
+
+      if (!parent) {
+        return res.status(400).json({ error: `Unknown category: ${String(category)}` });
+      }
+
       whereClause.category = {
         is: {
-          name: {
-            contains: String(category),
-            mode: 'insensitive',
-          },
+          OR: [
+            { id: parent.id },
+            { parentId: parent.id },
+          ],
         },
       };
+
+      // Subcategory filter: the leaf must exist AND belong to the resolved
+      // parent, otherwise the request is invalid — a subcategory can never
+      // leak listings from another category.
+      if (subcategory) {
+        const leaf = await prisma.category.findFirst({
+          where: {
+            parentId: parent.id,
+            OR: [
+              { id: String(subcategory) },
+              { slug: { equals: String(subcategory), mode: 'insensitive' } },
+              { name: { equals: String(subcategory), mode: 'insensitive' } },
+            ],
+          },
+        });
+
+        if (!leaf) {
+          return res.status(400).json({ error: `Unknown subcategory "${String(subcategory)}" for category "${parent.slug}"` });
+        }
+
+        whereClause.category = { is: { id: leaf.id } };
+      }
+    } else if (subcategory) {
+      return res.status(400).json({ error: 'A subcategory filter requires its parent category' });
     }
 
     // Location filter
@@ -171,13 +240,27 @@ export async function getAll(req: Request, res: Response) {
             logo: true,
             city: true,
             state: true,
+            rating: true,
+            verificationStatus: true,
           },
         },
-        category: true,
+        category: {
+          include: {
+            parent: { select: { id: true, name: true, slug: true } },
+          },
+        },
       },
     });
 
-    return res.status(200).json({ services });
+    return res.status(200).json({
+      services,
+      pagination: {
+        total,
+        page: pageNum,
+        limit: pageSize,
+        totalPages: pageSize > 0 ? Math.ceil(total / pageSize) : 0,
+      },
+    });
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Server error fetching services' });
   }

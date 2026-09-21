@@ -147,8 +147,8 @@ export interface ApiService {
   location?: string | null;
   coverImage?: string | null;
   isAvailable: boolean;
-  vendor?: Pick<ApiVendor, 'businessName' | 'ownerName' | 'category' | 'logo' | 'city' | 'state'>;
-  category?: { id: string; name: string };
+  vendor?: Pick<ApiVendor, 'businessName' | 'ownerName' | 'category' | 'logo' | 'city' | 'state' | 'rating' | 'verificationStatus'>;
+  category?: { id: string; name: string; slug?: string; parent?: { id: string; name: string; slug: string } | null };
 }
 
 /** `GET /api/marketplace/products`, `GET /api/search?type=products` */
@@ -199,6 +199,10 @@ export interface ApiCategory {
   description?: string | null;
   icon?: string | null;
   image?: string | null;
+  sortOrder?: number;
+  parentId?: string | null;
+  /** Present only on `GET /api/categories?tree=true` parent rows. */
+  subcategories?: ApiCategory[];
 }
 
 /**
