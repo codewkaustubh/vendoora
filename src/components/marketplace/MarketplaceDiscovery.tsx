@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -13,6 +13,10 @@ import SectionShell from '../common/SectionShell';
 interface MarketplaceDiscoveryProps {
   onSelectVendor?: (vendor: any) => void;
   onSelectService?: (service: any) => void;
+  /** When set by the parent (e.g. from the global header search), triggers
+   *  an immediate search with type='all'. Cleared after triggering. */
+  externalSearchQuery?: string;
+  externalSearchCity?: string;
 }
 
 interface DiscoveryFilters {
@@ -28,7 +32,7 @@ interface DiscoveryFilters {
   limit: number;
 }
 
-export default function MarketplaceDiscovery({ onSelectVendor, onSelectService }: MarketplaceDiscoveryProps) {
+export default function MarketplaceDiscovery({ onSelectVendor, onSelectService, externalSearchQuery, externalSearchCity }: MarketplaceDiscoveryProps) {
   const [filters, setFilters] = useState<DiscoveryFilters>({
     search: '',
     type: 'products',
@@ -94,6 +98,47 @@ export default function MarketplaceDiscovery({ onSelectVendor, onSelectService }
     setFilters({ ...filters, page: 1 });
     performSearch({ ...filters, page: 1 });
   };
+
+  // --- External search triggered from the global header search bar ---
+  // When the parent sets externalSearchQuery, we run a search with type='all'
+  // and then clear the prop by setting internal state so it doesn't re-trigger.
+  const [pendingExternalSearch, setPendingExternalSearch] = useState<{ query: string; city: string } | null>(null);
+
+  useEffect(() => {
+    if (externalSearchQuery) {
+      setPendingExternalSearch({ query: externalSearchQuery, city: externalSearchCity || '' });
+    }
+  }, [externalSearchQuery, externalSearchCity]);
+
+  useEffect(() => {
+    if (pendingExternalSearch) {
+      setFilters({
+        search: pendingExternalSearch.query,
+        type: 'all',
+        minPrice: 0,
+        maxPrice: 500000,
+        city: pendingExternalSearch.city,
+        sortBy: 'rating',
+        category: '',
+        minRating: 0,
+        page: 1,
+        limit: 12,
+      });
+      performSearch({
+        search: pendingExternalSearch.query,
+        type: 'all',
+        minPrice: 0,
+        maxPrice: 500000,
+        city: pendingExternalSearch.city,
+        sortBy: 'rating',
+        category: '',
+        minRating: 0,
+        page: 1,
+        limit: 12,
+      });
+      setPendingExternalSearch(null);
+    }
+  }, [pendingExternalSearch]);
 
   const getActiveItems = () => {
     if (filters.type === 'all') {

@@ -149,6 +149,8 @@ export default function VendooraLandingPage({
   const [categoryTreeError, setCategoryTreeError] = useState<string | null>(null);
   const [activeCategorySlug, setActiveCategorySlug] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [externalSearchQuery, setExternalSearchQuery] = useState<string>('');
+  const [externalSearchCity, setExternalSearchCity] = useState<string>('');
   const [selectedLocation, setSelectedLocation] = useState<string>('Mumbai, MH');
   const [activeTab, setActiveTab] = useState('home');
   const [vendors, setVendors] = useState<ApiVendor[]>([]);
@@ -588,13 +590,24 @@ export default function VendooraLandingPage({
     if (tabId !== 'categories') setActiveCategorySlug(null);
     const elementIdMap: { [key: string]: string } = {
       home: 'vendoora-landing-page',
-      search: 'search-section-root',
+      search: 'marketplace-discovery-root',
       categories: 'categories-section-root',
       market: 'marketplace-section-root',
       packages: 'packages-section-root',
       bookings: 'customer-bookings-root',
     };
     const element = document.getElementById(elementIdMap[tabId]);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  // Header search submit: trigger the MarketplaceDiscovery search and scroll to it
+  const handleHeaderSearchSubmit = (query: string) => {
+    if (!query.trim()) return;
+    setExternalSearchQuery(query);
+    setExternalSearchCity(selectedLocation.split(',')[0]?.trim() || '');
+    const element = document.getElementById('marketplace-discovery-root');
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -619,6 +632,7 @@ export default function VendooraLandingPage({
           }
         }}
         onSearchChange={setSearchQuery}
+        onSearchSubmit={handleHeaderSearchSubmit}
         onLocationChange={setSelectedLocation}
         currentUser={currentUser}
         onLoginClick={() => onOpenAuth?.('login', 'CLIENT')}
@@ -803,7 +817,12 @@ export default function VendooraLandingPage({
         {/* 6.5. Marketplace Discovery with Filters (Strict order item 6.5) */}
         <section id="marketplace-discovery-root" className="w-full bg-gradient-to-b from-zinc-900 to-zinc-800 py-12">
           <div className="w-full max-w-7xl mx-auto px-4 md:px-6">
-            <MarketplaceDiscovery onSelectVendor={openVendorInquiry} onSelectService={openServiceBooking} />
+            <MarketplaceDiscovery
+              onSelectVendor={openVendorInquiry}
+              onSelectService={openServiceBooking}
+              externalSearchQuery={externalSearchQuery}
+              externalSearchCity={externalSearchCity}
+            />
           </div>
         </section>
 

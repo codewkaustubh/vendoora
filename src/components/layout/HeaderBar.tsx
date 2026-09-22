@@ -16,6 +16,7 @@ interface HeaderBarProps {
   vendorMode: boolean;
   onVendorModeToggle: (enabled: boolean) => void;
   onSearchChange?: (term: string) => void;
+  onSearchSubmit?: (term: string) => void;
   onLocationChange?: (location: string) => void;
   onAccountClick?: () => void;
   currentUser?: AuthUser | null;
@@ -28,6 +29,7 @@ export default function HeaderBar({
   vendorMode,
   onVendorModeToggle,
   onSearchChange,
+  onSearchSubmit,
   onLocationChange,
   onAccountClick,
   currentUser,
@@ -39,6 +41,7 @@ export default function HeaderBar({
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSearchChange?.(searchTerm);
+    onSearchSubmit?.(searchTerm);
   };
 
   return (
